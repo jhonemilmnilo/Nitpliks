@@ -161,11 +161,15 @@ class FolderActionBottomSheet extends ConsumerWidget {
 
     final result = await DeviceMediaService.renameFolder(folder.id, trimmed);
 
-    // Stop skeleton loader and refresh
-    ref.read(updatingFolderIdProvider.notifier).state = null;
-
     if (result == RenameResult.success) {
-      ref.invalidate(deviceFoldersProvider);
+      // Wait until deviceFoldersProvider has completely re-fetched and updated state
+      try {
+        final _ = await ref.refresh(deviceFoldersProvider.future);
+      } catch (_) {}
+
+      // ONLY remove skeleton AFTER the new data is 100% loaded
+      ref.read(updatingFolderIdProvider.notifier).state = null;
+
       if (parentContext.mounted) {
         _showTopToast(
           context: parentContext,
@@ -174,11 +178,15 @@ class FolderActionBottomSheet extends ConsumerWidget {
           isError: false,
         );
       }
-    } else if (result == RenameResult.permissionDenied) {
-      if (parentContext.mounted) {
-        _showStoragePermissionDialog(parentContext, ref);
-      }
     } else {
+      // Revert skeleton immediately on error
+      ref.read(updatingFolderIdProvider.notifier).state = null;
+
+      if (result == RenameResult.permissionDenied) {
+        if (parentContext.mounted) {
+          _showStoragePermissionDialog(parentContext, ref);
+        }
+      } else {
       String msg;
       switch (result) {
         case RenameResult.invalidCharacters:
@@ -203,6 +211,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
       }
     }
   }
+}
 
   /// Modern floating Top Toast overlay
   static void _showTopToast({
@@ -315,10 +324,13 @@ class FolderActionBottomSheet extends ConsumerWidget {
               ref.read(updatingFolderIdProvider.notifier).state = folder.id;
 
               final success = await DeviceMediaService.deleteFolderVideos(folder.id);
-              ref.read(updatingFolderIdProvider.notifier).state = null;
 
               if (success) {
-                ref.invalidate(deviceFoldersProvider);
+                try {
+                  final _ = await ref.refresh(deviceFoldersProvider.future);
+                } catch (_) {}
+                ref.read(updatingFolderIdProvider.notifier).state = null;
+
                 if (context.mounted) {
                   _showTopToast(
                     context: context,
@@ -328,6 +340,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
                   );
                 }
               } else {
+                ref.read(updatingFolderIdProvider.notifier).state = null;
                 if (context.mounted) {
                   _showTopToast(
                     context: context,
