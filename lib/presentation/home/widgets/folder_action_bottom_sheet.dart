@@ -26,76 +26,166 @@ class FolderActionBottomSheet extends ConsumerWidget {
   void _showRenameDialog(BuildContext context, WidgetRef ref) {
     final palette = ref.read(paletteProvider);
     final controller = TextEditingController(text: folder.name);
+    bool isSubmitting = false;
+    String? errorMessage;
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        backgroundColor: palette.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Rename Folder',
-          style: TextStyle(color: palette.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          style: TextStyle(color: palette.textPrimary, fontSize: 14),
-          decoration: InputDecoration(
-            hintText: 'Enter new folder name',
-            hintStyle: TextStyle(color: palette.textMuted),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: palette.border),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: palette.border),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: palette.primary),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel', style: TextStyle(color: palette.textMuted)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: palette.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () async {
-              final newName = controller.text.trim();
-              if (newName.isEmpty || newName == folder.name) {
-                Navigator.pop(dialogCtx);
-                return;
-              }
-              Navigator.pop(dialogCtx);
-              final success = await DeviceMediaService.renameFolder(folder.id, newName);
-              if (success) {
-                ref.invalidate(deviceFoldersProvider);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Renamed to "$newName"')),
-                  );
-                }
-              } else {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Could not rename folder on device')),
-                  );
-                }
-              }
-            },
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (builderCtx, setDialogState) {
+            return AlertDialog(
+              backgroundColor: palette.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Text(
+                'Rename Folder',
+                style: TextStyle(
+                  color: palette.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    enabled: !isSubmitting,
+                    style: TextStyle(color: palette.textPrimary, fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Enter new folder name',
+                      hintStyle: TextStyle(color: palette.textMuted),
+                      errorText: errorMessage,
+                      errorStyle: const TextStyle(fontSize: 12, color: Colors.redAccent),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: palette.border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: palette.border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: palette.primary),
+                      ),
+                    ),
+                    onSubmitted: (_) async {
+                      if (isSubmitting) return;
+                      await _performRename(
+                        dialogCtx: dialogCtx,
+                        parentContext: context,
+                        ref: ref,
+                        newName: controller.text,
+                        getIsSubmitting: () => isSubmitting,
+                        setIsSubmitting: (val) => setDialogState(() => isSubmitting = val),
+                        setErrorMessage: (msg) => setDialogState(() => errorMessage = msg),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
+                  child: Text('Cancel', style: TextStyle(color: palette.textMuted)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: palette.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: isSubmitting
+                      ? null
+                      : () async {
+                          await _performRename(
+                            dialogCtx: dialogCtx,
+                            parentContext: context,
+                            ref: ref,
+                            newName: controller.text,
+                            getIsSubmitting: () => isSubmitting,
+                            setIsSubmitting: (val) => setDialogState(() => isSubmitting = val),
+                            setErrorMessage: (msg) => setDialogState(() => errorMessage = msg),
+                          );
+                        },
+                  child: isSubmitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Rename'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
+  }
+
+  Future<void> _performRename({
+    required BuildContext dialogCtx,
+    required BuildContext parentContext,
+    required WidgetRef ref,
+    required String newName,
+    required bool Function() getIsSubmitting,
+    required void Function(bool) setIsSubmitting,
+    required void Function(String?) setErrorMessage,
+  }) async {
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) {
+      setErrorMessage('Folder name cannot be empty');
+      return;
+    }
+
+    if (trimmed == folder.name) {
+      Navigator.pop(dialogCtx);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    final result = await DeviceMediaService.renameFolder(folder.id, trimmed);
+
+    if (!dialogCtx.mounted) return;
+
+    if (result == RenameResult.success) {
+      ref.invalidate(deviceFoldersProvider);
+      Navigator.pop(dialogCtx);
+      if (parentContext.mounted) {
+        ScaffoldMessenger.of(parentContext).showSnackBar(
+          SnackBar(
+            content: Text('Renamed folder to "$trimmed"'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } else {
+      String msg;
+      switch (result) {
+        case RenameResult.invalidCharacters:
+          msg = 'Name cannot contain \\ / : * ? " < > |';
+          break;
+        case RenameResult.alreadyExists:
+          msg = 'A folder with that name already exists';
+          break;
+        case RenameResult.permissionDenied:
+          msg = 'Permission denied by Android Scoped Storage';
+          break;
+        case RenameResult.emptyFolder:
+          msg = 'Folder is empty or not found';
+          break;
+        default:
+          msg = 'Could not rename folder on this device';
+      }
+      setIsSubmitting(false);
+      setErrorMessage(msg);
+    }
   }
 
   void _showDeleteDialog(BuildContext context, WidgetRef ref) {

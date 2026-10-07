@@ -166,8 +166,20 @@ class DeviceMediaService {
     }
   }
 
-  /// Safe rename directory on disk
-  static Future<bool> renameFolder(String folderId, String newName) async {
+  /// Result of rename operation
+  static Future<RenameResult> renameFolder(String folderId, String newName) async {
+    // 1. Sanitize input name
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) {
+      return RenameResult.invalidName;
+    }
+    
+    // Check for illegal file/folder characters in Android/Linux/Windows
+    final illegalChars = RegExp(r'[\\/:*?"<>|]');
+    if (illegalChars.hasMatch(trimmed)) {
+      return RenameResult.invalidCharacters;
+    }
+
     try {
       final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
         type: RequestType.video,
@@ -180,25 +192,53 @@ class DeviceMediaService {
       );
 
       final List<AssetEntity> assets = await album.getAssetListRange(start: 0, end: 1);
-      if (assets.isEmpty) return false;
+      if (assets.isEmpty) {
+        return RenameResult.emptyFolder;
+      }
 
       final file = await assets.first.file;
-      if (file == null) return false;
+      if (file == null) {
+        return RenameResult.fileNotFound;
+      }
 
       final currentDir = file.parent;
       final parentDir = currentDir.parent;
-      final newDirPath = '${parentDir.path}${Platform.pathSeparator}$newName';
+      final newDirPath = '${parentDir.path}${Platform.pathSeparator}$trimmed';
+
+      if (currentDir.path.toLowerCase() == newDirPath.toLowerCase()) {
+        return RenameResult.sameName;
+      }
 
       final newDir = Directory(newDirPath);
       if (await newDir.exists()) {
-        return false; // Already exists
+        return RenameResult.alreadyExists;
       }
 
+      // Perform directory rename on file system
       await currentDir.rename(newDirPath);
-      return true;
+
+      // Invalidate PhotoManager cache so media scanner picks up the changes
+      await PhotoManager.clearFileCache();
+      
+      return RenameResult.success;
+    } on FileSystemException catch (e) {
+      debugPrint('FileSystemException renaming folder: $e');
+      return RenameResult.permissionDenied;
     } catch (e, stack) {
       debugPrint('Error renaming folder: $e\n$stack');
-      return false;
+      return RenameResult.unknownError;
     }
   }
+}
+
+enum RenameResult {
+  success,
+  invalidName,
+  invalidCharacters,
+  sameName,
+  alreadyExists,
+  emptyFolder,
+  fileNotFound,
+  permissionDenied,
+  unknownError,
 }
