@@ -73,10 +73,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _isSpeedDrawerOpen = false;
   bool _isLandscape = false;
 
-  // Enhance feedback toast
-  bool _showEnhanceToast = false;
-  Timer? _enhanceToastTimer;
-
   static const String _prefRememberSpeedKey = 'nitpliks_remember_playback_speed';
   static const String _prefCachedSpeedKey = 'nitpliks_cached_playback_speed';
   static const String _prefEnhanceKey = 'nitpliks_video_enhance_enabled';
@@ -180,17 +176,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final newEnhance = !_isEnhanced;
     setState(() {
       _isEnhanced = newEnhance;
-      _showEnhanceToast = true;
     });
 
     _applyNativeVideoEnhancement(newEnhance);
-
-    _enhanceToastTimer?.cancel();
-    _enhanceToastTimer = Timer(const Duration(milliseconds: 1400), () {
-      if (mounted) {
-        setState(() => _showEnhanceToast = false);
-      }
-    });
 
     SharedPreferences.getInstance().then((prefs) {
       prefs.setBool(_prefEnhanceKey, newEnhance);
@@ -543,7 +531,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _hideControlsTimer?.cancel();
     _hudDismissTimer?.cancel();
     _doubleTapAnimTimer?.cancel();
-    _enhanceToastTimer?.cancel();
     _playingSub.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
@@ -1020,42 +1007,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Widget _buildFloatingHudOverlay(AppPalette palette) {
-    if (_showEnhanceToast) {
-      return Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.82),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: _isEnhanced ? palette.primary.withValues(alpha: 0.6) : Colors.white12,
-              width: 1.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                LucideIcons.sparkles,
-                color: _isEnhanced ? palette.primary : Colors.white60,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                _isEnhanced ? 'Visual Enhance: ON (Vivid HDR)' : 'Visual Enhance: OFF (Original)',
-                style: TextStyle(
-                  color: _isEnhanced ? palette.primary : Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     if (_activeGesture == _GestureType.none) {
       return const SizedBox.shrink();
     }
