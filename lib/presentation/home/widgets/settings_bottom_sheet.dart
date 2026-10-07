@@ -41,13 +41,6 @@ class _SettingsBottomSheetState extends ConsumerState<SettingsBottomSheet> {
         color: currentPalette.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: currentPalette.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.35),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
       ),
       child: SafeArea(
         child: Padding(
@@ -270,12 +263,6 @@ class _SettingsBottomSheetState extends ConsumerState<SettingsBottomSheet> {
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: palette.primary.withValues(alpha: 0.35),
-                                    blurRadius: 6,
-                                  ),
-                                ],
                               ),
                               child: isSelected
                                   ? const Icon(

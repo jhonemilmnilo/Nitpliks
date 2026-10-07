@@ -20,7 +20,6 @@ class VideoListItem extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.border),
       ),
       child: Material(
         color: Colors.transparent,
@@ -38,7 +37,6 @@ class VideoListItem extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceLight,
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.border),
                   ),
                   child: Stack(
                     children: [

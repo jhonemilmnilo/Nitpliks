@@ -27,28 +27,16 @@ class FolderCard extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: palette.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: palette.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.25),
-                blurRadius: 8,
-                offset: const Offset(0, 3),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(14),
           ),
           child: Row(
             children: [
-              // Folder icon with dynamic palette glow
+              // Folder icon with flat accent container
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: palette.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: palette.primary.withValues(alpha: 0.3),
-                    width: 1,
-                  ),
                 ),
                 child: Icon(
                   LucideIcons.folder,

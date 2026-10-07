@@ -344,110 +344,115 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
           // ──────────────────────────────────────────────
           // FLOATING BOTTOM SEARCHBAR & SETTINGS ACTION
+          // Inverted contrast: dark dock in light mode, light dock in dark mode
           // Automatically hides with animation when sort modal is open
           // ──────────────────────────────────────────────
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeInOut,
-            left: 16,
-            right: 16,
-            bottom: _isModalOpen ? -80 : 16,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: _isModalOpen ? 0.0 : 1.0,
-              child: SafeArea(
-                child: Row(
-                  children: [
-                    // Floating Search Input Bar
-                    Expanded(
-                      child: Container(
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: palette.surface.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: palette.border),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.35),
-                              blurRadius: 16,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: TextField(
-                          controller: _searchController,
-                          style: TextStyle(color: palette.textPrimary, fontSize: 14),
-                          decoration: InputDecoration(
-                            hintText: 'Search folders...',
-                            hintStyle: TextStyle(color: palette.textMuted, fontSize: 14),
-                            border: InputBorder.none,
-                            prefixIcon: Icon(
-                              LucideIcons.search,
-                              size: 18,
-                              color: palette.textMuted,
-                            ),
-                            suffixIcon: _searchQuery.isNotEmpty
-                                ? IconButton(
-                                    icon: Icon(
-                                      LucideIcons.x,
-                                      size: 16,
-                                      color: palette.textMuted,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _searchController.clear();
-                                        _searchQuery = '';
-                                      });
-                                    },
-                                  )
-                                : null,
-                            contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          onChanged: (val) {
-                            setState(() {
-                              _searchQuery = val;
-                            });
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
+          Builder(
+            builder: (context) {
+              // High-contrast inverted tokens
+              final dockBg = palette.isDark
+                  ? const Color(0xFF1E222D) // Clean raised dark surface in Dark mode
+                  : const Color(0xFF0F172A); // Sleek deep slate/dark in Light mode
+              final dockBorder = palette.isDark
+                  ? const Color(0xFF2E3547)
+                  : const Color(0xFF1E293B);
+              final dockText = palette.isDark
+                  ? const Color(0xFFF8FAFC)
+                  : const Color(0xFFF1F5F9);
+              final dockMuted = palette.isDark
+                  ? const Color(0xFF94A3B8)
+                  : const Color(0xFF94A3B8);
 
-                    // Floating Settings Button
-                    Container(
-                      height: 52,
-                      width: 52,
-                      decoration: BoxDecoration(
-                        color: palette.surface.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: palette.border),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.35),
-                            blurRadius: 16,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: _openSettingsModal,
-                          child: Center(
-                            child: Icon(
-                              LucideIcons.settings,
-                              color: palette.textPrimary,
-                              size: 20,
+              return AnimatedPositioned(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                left: 16,
+                right: 16,
+                bottom: _isModalOpen ? -80 : 16,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: _isModalOpen ? 0.0 : 1.0,
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        // Floating Search Input Bar
+                        Expanded(
+                          child: Container(
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color: dockBg,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: dockBorder),
+                            ),
+                            child: TextField(
+                              controller: _searchController,
+                              style: TextStyle(color: dockText, fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'Search folders...',
+                                hintStyle: TextStyle(color: dockMuted, fontSize: 14),
+                                border: InputBorder.none,
+                                prefixIcon: Icon(
+                                  LucideIcons.search,
+                                  size: 18,
+                                  color: dockMuted,
+                                ),
+                                suffixIcon: _searchQuery.isNotEmpty
+                                    ? IconButton(
+                                        icon: Icon(
+                                          LucideIcons.x,
+                                          size: 16,
+                                          color: dockMuted,
+                                        ),
+                                        onPressed: () {
+                                          setState(() {
+                                            _searchController.clear();
+                                            _searchQuery = '';
+                                          });
+                                        },
+                                      )
+                                    : null,
+                                contentPadding: const EdgeInsets.symmetric(vertical: 14),
+                              ),
+                              onChanged: (val) {
+                                setState(() {
+                                  _searchQuery = val;
+                                });
+                              },
                             ),
                           ),
                         ),
-                      ),
+                        const SizedBox(width: 10),
+
+                        // Floating Settings Button
+                        Container(
+                          height: 50,
+                          width: 50,
+                          decoration: BoxDecoration(
+                            color: dockBg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: dockBorder),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(14),
+                              onTap: _openSettingsModal,
+                              child: Center(
+                                child: Icon(
+                                  LucideIcons.settings,
+                                  color: dockText,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ],
       ),

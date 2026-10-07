@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:video_player/app/theme/app_theme.dart';
+import 'package:video_player/app/theme/palette_provider.dart';
 import 'package:video_player/presentation/home/providers/folder_sort_provider.dart';
 
 class FolderSortBottomSheet extends ConsumerWidget {
@@ -19,19 +19,13 @@ class FolderSortBottomSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final currentSort = ref.watch(folderSortProvider);
+    final palette = ref.watch(paletteProvider);
 
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.surface,
+        color: palette.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-        border: Border.all(color: AppTheme.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
-          ),
-        ],
+        border: Border.all(color: palette.border),
       ),
       child: SafeArea(
         child: Padding(
@@ -46,7 +40,7 @@ class FolderSortBottomSheet extends ConsumerWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.textMuted.withValues(alpha: 0.4),
+                    color: palette.textMuted.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -54,10 +48,10 @@ class FolderSortBottomSheet extends ConsumerWidget {
               const SizedBox(height: 18),
 
               // Title
-              const Text(
+              Text(
                 'Sort Folders By',
                 style: TextStyle(
-                  color: AppTheme.textPrimary,
+                  color: palette.textPrimary,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   letterSpacing: -0.3,
@@ -72,12 +66,12 @@ class FolderSortBottomSheet extends ConsumerWidget {
                   margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.primary.withValues(alpha: 0.12)
+                        ? palette.primary.withValues(alpha: 0.12)
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: isSelected
-                          ? AppTheme.primary.withValues(alpha: 0.4)
+                          ? palette.primary.withValues(alpha: 0.4)
                           : Colors.transparent,
                     ),
                   ),
@@ -87,15 +81,15 @@ class FolderSortBottomSheet extends ConsumerWidget {
                     title: Text(
                       option.label,
                       style: TextStyle(
-                        color: isSelected ? AppTheme.accent : AppTheme.textPrimary,
+                        color: isSelected ? palette.primary : palette.textPrimary,
                         fontSize: 15,
                         fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                       ),
                     ),
                     trailing: isSelected
-                        ? const Icon(
+                        ? Icon(
                             LucideIcons.check,
-                            color: AppTheme.accent,
+                            color: palette.primary,
                             size: 18,
                           )
                         : null,
