@@ -3,12 +3,32 @@ class DeviceFolderModel {
   final String id;
   final String name;
   final int videoCount;
+  final DateTime? lastModified;
 
   const DeviceFolderModel({
     required this.id,
     required this.name,
     required this.videoCount,
+    this.lastModified,
   });
+
+  String get formattedDate {
+    if (lastModified == null) return '';
+    final now = DateTime.now();
+    final difference = now.difference(lastModified!);
+
+    if (difference.inDays == 0) {
+      final hours = lastModified!.hour.toString().padLeft(2, '0');
+      final minutes = lastModified!.minute.toString().padLeft(2, '0');
+      return 'Today $hours:$minutes';
+    } else if (difference.inDays == 1) {
+      return 'Yesterday';
+    } else if (difference.inDays < 7) {
+      return '${difference.inDays}d ago';
+    } else {
+      return '${lastModified!.year}-${lastModified!.month.toString().padLeft(2, '0')}-${lastModified!.day.toString().padLeft(2, '0')}';
+    }
+  }
 }
 
 /// Domain Entity: Video Item loaded on-demand

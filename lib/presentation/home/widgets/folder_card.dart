@@ -72,12 +72,35 @@ class FolderCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      '${folder.videoCount} ${folder.videoCount == 1 ? 'video' : 'videos'}',
-                      style: const TextStyle(
-                        color: AppTheme.textMuted,
-                        fontSize: 12,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          '${folder.videoCount} ${folder.videoCount == 1 ? 'video' : 'videos'}',
+                          style: const TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 12,
+                          ),
+                        ),
+                        if (folder.formattedDate.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            width: 3,
+                            height: 3,
+                            decoration: const BoxDecoration(
+                              color: AppTheme.textMuted,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            folder.formattedDate,
+                            style: const TextStyle(
+                              color: AppTheme.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),

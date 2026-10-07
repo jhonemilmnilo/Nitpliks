@@ -6,8 +6,10 @@ import 'package:video_player/app/theme/app_theme.dart';
 import 'package:video_player/data/services/device_media_service.dart';
 import 'package:video_player/domain/models/media_models.dart';
 import 'package:video_player/presentation/folder/folder_detail_screen.dart';
+import 'providers/folder_sort_provider.dart';
 import 'providers/media_provider.dart';
 import 'widgets/folder_card.dart';
+import 'widgets/folder_sort_bottom_sheet.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -191,9 +193,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               );
             }
 
+            final sortOption = ref.watch(folderSortProvider);
+
             final filteredFolders = result.folders.where((DeviceFolderModel f) {
               return f.name.toLowerCase().contains(_searchQuery.toLowerCase());
             }).toList();
+
+            // Apply selected sorting criteria
+            switch (sortOption) {
+              case FolderSortOption.videoCountDesc:
+                filteredFolders.sort((a, b) => b.videoCount.compareTo(a.videoCount));
+                break;
+              case FolderSortOption.videoCountAsc:
+                filteredFolders.sort((a, b) => a.videoCount.compareTo(b.videoCount));
+                break;
+              case FolderSortOption.dateDesc:
+                filteredFolders.sort((a, b) {
+                  final dateA = a.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  final dateB = b.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  return dateB.compareTo(dateA);
+                });
+                break;
+              case FolderSortOption.dateAsc:
+                filteredFolders.sort((a, b) {
+                  final dateA = a.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  final dateB = b.lastModified ?? DateTime.fromMillisecondsSinceEpoch(0);
+                  return dateA.compareTo(dateB);
+                });
+                break;
+              case FolderSortOption.nameAsc:
+                filteredFolders.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+                break;
+              case FolderSortOption.nameDesc:
+                filteredFolders.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+                break;
+            }
 
             if (filteredFolders.isEmpty) {
               return Center(
@@ -228,7 +262,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 parent: BouncingScrollPhysics(),
               ),
               slivers: [
-                // Header Count indicator
+                // Header Count indicator with interactive Sort Button
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -243,12 +277,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const Text(
-                          'Folders First',
-                          style: TextStyle(
-                            color: AppTheme.textMuted,
-                            fontSize: 11,
-                            letterSpacing: 0.2,
+                        InkWell(
+                          onTap: () => FolderSortBottomSheet.show(context),
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: AppTheme.surfaceLight,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppTheme.border),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  LucideIcons.arrowUpDown,
+                                  size: 13,
+                                  color: AppTheme.accent,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  sortOption.label,
+                                  style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -256,29 +313,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
 
-                // Virtualized folder grid
+                // Virtualized folder list (one item per line)
                 SliverPadding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      mainAxisSpacing: 10,
-                      crossAxisSpacing: 10,
-                      childAspectRatio: 2.1,
-                    ),
+                  sliver: SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) {
                         final folder = filteredFolders[index];
-                        return FolderCard(
-                          folder: folder,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => FolderDetailScreen(folder: folder),
-                              ),
-                            );
-                          },
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: FolderCard(
+                            folder: folder,
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => FolderDetailScreen(folder: folder),
+                                ),
+                              );
+                            },
+                          ),
                         );
                       },
                       childCount: filteredFolders.length,

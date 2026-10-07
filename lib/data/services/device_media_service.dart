@@ -64,6 +64,7 @@ class DeviceMediaService {
               id: album.id,
               name: album.name,
               videoCount: count,
+              lastModified: album.lastModified,
             ),
           );
         }
