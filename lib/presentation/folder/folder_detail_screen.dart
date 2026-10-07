@@ -217,7 +217,7 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                 color: palette.primary,
                 backgroundColor: palette.surface,
                 onRefresh: () async {
-                  return ref.refresh(folderVideosProvider(widget.folder.id).future);
+                  return ref.read(folderVideosProvider(widget.folder.id).notifier).refresh();
                 },
                 child: CustomScrollView(
                   physics: const AlwaysScrollableScrollPhysics(

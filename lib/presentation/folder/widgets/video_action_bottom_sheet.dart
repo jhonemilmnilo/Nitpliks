@@ -188,12 +188,17 @@ class VideoActionBottomSheet extends ConsumerWidget {
     Navigator.pop(dialogCtx);
     ref.read(updatingVideoIdProvider.notifier).state = video.id;
 
-    final result = await DeviceMediaService.renameVideo(video.path, trimmed);
+    final output = await DeviceMediaService.renameVideo(video.path, trimmed);
 
-    if (result == RenameResult.success) {
-      try {
-        final _ = await ref.refresh(folderVideosProvider(folderId).future);
-      } catch (_) {}
+    if (output.isSuccess) {
+      final newPath = output.targetPath ?? video.path;
+      // In-memory targeted update: only this item is updated, zero full-list reload
+      ref.read(folderVideosProvider(folderId).notifier).updateVideo(
+        videoId: video.id,
+        newTitle: trimmed,
+        newPath: newPath,
+      );
+
       ref.read(updatingVideoIdProvider.notifier).state = null;
 
       if (parentContext.mounted) {
@@ -208,7 +213,7 @@ class VideoActionBottomSheet extends ConsumerWidget {
       ref.read(updatingVideoIdProvider.notifier).state = null;
 
       String msg;
-      switch (result) {
+      switch (output.result) {
         case RenameResult.invalidCharacters:
           msg = 'Name cannot contain \\ / : * ? " < > |';
           break;
@@ -291,10 +296,10 @@ class VideoActionBottomSheet extends ConsumerWidget {
               final success = await DeviceMediaService.deleteSingleVideo(video.id, video.path);
 
               if (success) {
-                try {
-                  final _ = await ref.refresh(folderVideosProvider(folderId).future);
-                  ref.invalidate(deviceFoldersProvider);
-                } catch (_) {}
+                // In-memory targeted removal: only this item is removed, zero full-list reload
+                ref.read(folderVideosProvider(folderId).notifier).removeVideo(video.id);
+                // Invalidate folder summary count in background
+                ref.invalidate(deviceFoldersProvider);
                 ref.read(updatingVideoIdProvider.notifier).state = null;
 
                 if (context.mounted) {

@@ -308,15 +308,15 @@ class DeviceMediaService {
   }
 
   /// Rename a single video file on disk & MediaStore
-  static Future<RenameResult> renameVideo(String videoPath, String newBaseName) async {
+  static Future<VideoRenameOutput> renameVideo(String videoPath, String newBaseName) async {
     final trimmed = newBaseName.trim();
-    if (trimmed.isEmpty) return RenameResult.invalidName;
+    if (trimmed.isEmpty) return const VideoRenameOutput(RenameResult.invalidName);
 
     final illegalChars = RegExp(r'[\\/:*?"<>|]');
-    if (illegalChars.hasMatch(trimmed)) return RenameResult.invalidCharacters;
+    if (illegalChars.hasMatch(trimmed)) return const VideoRenameOutput(RenameResult.invalidCharacters);
 
     final file = File(videoPath);
-    if (!await file.exists()) return RenameResult.fileNotFound;
+    if (!await file.exists()) return const VideoRenameOutput(RenameResult.fileNotFound);
 
     final parentDir = file.parent;
     final extension = p.extension(videoPath);
@@ -324,29 +324,29 @@ class DeviceMediaService {
     final targetPath = '${parentDir.path}${Platform.pathSeparator}$targetFileName';
 
     if (file.path.toLowerCase() == targetPath.toLowerCase()) {
-      return RenameResult.sameName;
+      return const VideoRenameOutput(RenameResult.sameName);
     }
 
     final targetFile = File(targetPath);
     if (await targetFile.exists()) {
-      return RenameResult.alreadyExists;
+      return const VideoRenameOutput(RenameResult.alreadyExists);
     }
 
     final hasManage = await hasManageStoragePermission();
     if (!hasManage) {
-      return RenameResult.permissionDenied;
+      return const VideoRenameOutput(RenameResult.permissionDenied);
     }
 
     try {
       await file.rename(targetPath);
       await PhotoManager.clearFileCache();
-      return RenameResult.success;
+      return VideoRenameOutput(RenameResult.success, targetPath: targetPath, newFileName: trimmed);
     } on FileSystemException catch (e) {
       debugPrint('FileSystemException renaming video: $e');
-      return RenameResult.permissionDenied;
+      return const VideoRenameOutput(RenameResult.permissionDenied);
     } catch (e, stack) {
       debugPrint('Error renaming video: $e\n$stack');
-      return RenameResult.unknownError;
+      return const VideoRenameOutput(RenameResult.unknownError);
     }
   }
 
@@ -382,4 +382,18 @@ enum RenameResult {
   fileNotFound,
   permissionDenied,
   unknownError,
+}
+
+class VideoRenameOutput {
+  final RenameResult result;
+  final String? targetPath;
+  final String? newFileName;
+
+  const VideoRenameOutput(
+    this.result, {
+    this.targetPath,
+    this.newFileName,
+  });
+
+  bool get isSuccess => result == RenameResult.success;
 }

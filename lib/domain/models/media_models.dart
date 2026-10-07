@@ -57,6 +57,30 @@ class VideoModel {
     this.asset,
   });
 
+  VideoModel copyWith({
+    String? id,
+    String? title,
+    String? path,
+    Duration? duration,
+    int? sizeInBytes,
+    String? parentFolder,
+    DateTime? modifiedDate,
+    String? thumbnailPath,
+    AssetEntity? asset,
+  }) {
+    return VideoModel(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      path: path ?? this.path,
+      duration: duration ?? this.duration,
+      sizeInBytes: sizeInBytes ?? this.sizeInBytes,
+      parentFolder: parentFolder ?? this.parentFolder,
+      modifiedDate: modifiedDate ?? this.modifiedDate,
+      thumbnailPath: thumbnailPath ?? this.thumbnailPath,
+      asset: asset ?? this.asset,
+    );
+  }
+
   /// Formatted duration string: HH:mm:ss or mm:ss
   String get formattedDuration {
     final hours = duration.inHours;

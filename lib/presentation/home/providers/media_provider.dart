@@ -7,9 +7,66 @@ final deviceFoldersProvider = FutureProvider<DeviceMediaResult>((ref) async {
   return await DeviceMediaService.fetchFolders();
 });
 
-/// Family provider for loading videos on-demand for a clicked folder
-final folderVideosProvider = FutureProvider.family<List<VideoModel>, String>((ref, folderId) async {
-  return await DeviceMediaService.fetchVideosInFolder(folderId);
+/// StateNotifier managing videos for a folder with in-memory targeted mutation (Zero reload flicker)
+class FolderVideosNotifier extends StateNotifier<AsyncValue<List<VideoModel>>> {
+  final String folderId;
+
+  FolderVideosNotifier(this.folderId) : super(const AsyncValue.loading()) {
+    loadVideos();
+  }
+
+  Future<void> loadVideos() async {
+    try {
+      final videos = await DeviceMediaService.fetchVideosInFolder(folderId);
+      if (mounted) {
+        state = AsyncValue.data(videos);
+      }
+    } catch (e, stack) {
+      if (mounted) {
+        state = AsyncValue.error(e, stack);
+      }
+    }
+  }
+
+  Future<void> refresh() async {
+    return loadVideos();
+  }
+
+  /// Surgically update a single video item without reloading the entire list
+  void updateVideo({
+    required String videoId,
+    required String newTitle,
+    required String newPath,
+  }) {
+    final currentList = state.value;
+    if (currentList == null) return;
+
+    final updated = currentList.map((video) {
+      if (video.id == videoId) {
+        return video.copyWith(
+          title: newTitle,
+          path: newPath,
+        );
+      }
+      return video;
+    }).toList();
+
+    state = AsyncValue.data(updated);
+  }
+
+  /// Surgically remove a single video item without reloading the entire list
+  void removeVideo(String videoId) {
+    final currentList = state.value;
+    if (currentList == null) return;
+
+    final updated = currentList.where((video) => video.id != videoId).toList();
+    state = AsyncValue.data(updated);
+  }
+}
+
+/// Family provider for loading and mutating videos on-demand for a clicked folder
+final folderVideosProvider = StateNotifierProvider.family<FolderVideosNotifier, AsyncValue<List<VideoModel>>, String>((ref, folderId) {
+  return FolderVideosNotifier(folderId);
 });
 
 /// State provider to track folder ID currently undergoing rename/update for skeleton animation
