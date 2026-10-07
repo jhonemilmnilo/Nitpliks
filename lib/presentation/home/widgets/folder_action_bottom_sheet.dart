@@ -155,29 +155,26 @@ class FolderActionBottomSheet extends ConsumerWidget {
       return;
     }
 
-    setIsSubmitting(true);
-    setErrorMessage(null);
+    // Dismiss dialog immediately and activate skeleton loader on the folder row
+    Navigator.pop(dialogCtx);
+    ref.read(updatingFolderIdProvider.notifier).state = folder.id;
 
     final result = await DeviceMediaService.renameFolder(folder.id, trimmed);
 
-    if (!dialogCtx.mounted) return;
+    // Stop skeleton loader and refresh
+    ref.read(updatingFolderIdProvider.notifier).state = null;
 
     if (result == RenameResult.success) {
-      // Invalidate and re-fetch folders so UI immediately reflects the new name
       ref.invalidate(deviceFoldersProvider);
-      
-      Navigator.pop(dialogCtx);
       if (parentContext.mounted) {
-        ScaffoldMessenger.of(parentContext).showSnackBar(
-          SnackBar(
-            content: Text('Renamed folder to "$trimmed"'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        _showTopToast(
+          context: parentContext,
+          ref: ref,
+          message: 'Renamed folder to "$trimmed"',
+          isError: false,
         );
       }
     } else if (result == RenameResult.permissionDenied) {
-      setIsSubmitting(false);
-      Navigator.pop(dialogCtx);
       if (parentContext.mounted) {
         _showStoragePermissionDialog(parentContext, ref);
       }
@@ -196,9 +193,40 @@ class FolderActionBottomSheet extends ConsumerWidget {
         default:
           msg = 'Could not rename folder on this device';
       }
-      setIsSubmitting(false);
-      setErrorMessage(msg);
+      if (parentContext.mounted) {
+        _showTopToast(
+          context: parentContext,
+          ref: ref,
+          message: msg,
+          isError: true,
+        );
+      }
     }
+  }
+
+  /// Modern floating Top Toast overlay
+  static void _showTopToast({
+    required BuildContext context,
+    required WidgetRef ref,
+    required String message,
+    bool isError = false,
+  }) {
+    final overlay = Overlay.of(context);
+    final palette = ref.read(paletteProvider);
+
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (ctx) => _TopToastWidget(
+        message: message,
+        palette: palette,
+        isError: isError,
+        onDismiss: () {
+          entry.remove();
+        },
+      ),
+    );
+
+    overlay.insert(entry);
   }
 
   static void _showStoragePermissionDialog(BuildContext context, WidgetRef ref) {
@@ -284,18 +312,28 @@ class FolderActionBottomSheet extends ConsumerWidget {
             ),
             onPressed: () async {
               Navigator.pop(dialogCtx);
+              ref.read(updatingFolderIdProvider.notifier).state = folder.id;
+
               final success = await DeviceMediaService.deleteFolderVideos(folder.id);
+              ref.read(updatingFolderIdProvider.notifier).state = null;
+
               if (success) {
                 ref.invalidate(deviceFoldersProvider);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Deleted "${folder.name}"')),
+                  _showTopToast(
+                    context: context,
+                    ref: ref,
+                    message: 'Deleted "${folder.name}"',
+                    isError: false,
                   );
                 }
               } else {
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Could not delete videos from device')),
+                  _showTopToast(
+                    context: context,
+                    ref: ref,
+                    message: 'Could not delete videos from device',
+                    isError: true,
                   );
                 }
               }
@@ -407,6 +445,119 @@ class FolderActionBottomSheet extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Floating Top Toast Notification with slide and fade animation
+class _TopToastWidget extends StatefulWidget {
+  final String message;
+  final dynamic palette;
+  final bool isError;
+  final VoidCallback onDismiss;
+
+  const _TopToastWidget({
+    required this.message,
+    required this.palette,
+    required this.isError,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_TopToastWidget> createState() => _TopToastWidgetState();
+}
+
+class _TopToastWidgetState extends State<_TopToastWidget>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<Offset> _offsetAnimation;
+  late final Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 320),
+    );
+
+    _offsetAnimation = Tween<Offset>(
+      begin: const Offset(0, -0.6),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
+
+    _opacityAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
+    );
+
+    _controller.forward();
+
+    // Auto-dismiss after 2.8 seconds
+    Future.delayed(const Duration(milliseconds: 2800), () async {
+      if (mounted) {
+        await _controller.reverse();
+        widget.onDismiss();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final palette = widget.palette;
+
+    return Positioned(
+      top: topPadding + 12,
+      left: 16,
+      right: 16,
+      child: SlideTransition(
+        position: _offsetAnimation,
+        child: FadeTransition(
+          opacity: _opacityAnimation,
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: palette.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: widget.isError ? Colors.redAccent.withValues(alpha: 0.5) : palette.primary.withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.isError ? LucideIcons.alertCircle : LucideIcons.checkCircle2,
+                    color: widget.isError ? Colors.redAccent : palette.primary,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      widget.message,
+                      style: TextStyle(
+                        color: palette.textPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

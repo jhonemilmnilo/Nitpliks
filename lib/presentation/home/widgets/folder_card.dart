@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:video_player/app/theme/palette_provider.dart';
 import 'package:video_player/domain/models/media_models.dart';
+import 'package:video_player/presentation/home/providers/media_provider.dart';
 import 'folder_action_bottom_sheet.dart';
 
 class FolderCard extends ConsumerWidget {
@@ -18,6 +19,12 @@ class FolderCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = ref.watch(paletteProvider);
+    final updatingFolderId = ref.watch(updatingFolderIdProvider);
+    final isUpdating = updatingFolderId == folder.id;
+
+    if (isUpdating) {
+      return _FolderCardSkeleton(palette: palette);
+    }
 
     return Material(
       color: Colors.transparent,
@@ -131,6 +138,113 @@ class FolderCard extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _FolderCardSkeleton extends StatefulWidget {
+  final dynamic palette;
+
+  const _FolderCardSkeleton({required this.palette});
+
+  @override
+  State<_FolderCardSkeleton> createState() => _FolderCardSkeletonState();
+}
+
+class _FolderCardSkeletonState extends State<_FolderCardSkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _animController;
+  late final Animation<double> _opacityAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _animController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 750),
+    )..repeat(reverse: true);
+
+    _opacityAnim = Tween<double>(begin: 0.35, end: 0.85).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = widget.palette;
+
+    return AnimatedBuilder(
+      animation: _opacityAnim,
+      builder: (context, child) {
+        final shimmerColor = palette.border.withValues(alpha: _opacityAnim.value);
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              // Skeleton Icon Box
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: shimmerColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+              const SizedBox(width: 10),
+
+              // Skeleton Lines
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Title placeholder
+                    Container(
+                      width: 140,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: shimmerColor,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    // Subtitle placeholder
+                    Container(
+                      width: 75,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: shimmerColor.withValues(alpha: _opacityAnim.value * 0.7),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // 3-dots placeholder
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: shimmerColor.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

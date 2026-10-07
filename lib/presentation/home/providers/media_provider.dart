@@ -11,3 +11,6 @@ final deviceFoldersProvider = FutureProvider<DeviceMediaResult>((ref) async {
 final folderVideosProvider = FutureProvider.family<List<VideoModel>, String>((ref, folderId) async {
   return await DeviceMediaService.fetchVideosInFolder(folderId);
 });
+
+/// State provider to track folder ID currently undergoing rename/update for skeleton animation
+final updatingFolderIdProvider = StateProvider<String?>((ref) => null);
