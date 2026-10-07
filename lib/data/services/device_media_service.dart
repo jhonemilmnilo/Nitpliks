@@ -167,7 +167,7 @@ class DeviceMediaService {
     }
   }
 
-  /// Delete all video assets in a folder using PhotoManager
+  /// Delete all video assets in a folder using PhotoManager and remove empty directory
   static Future<bool> deleteFolderVideos(String folderId) async {
     try {
       final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
@@ -181,16 +181,47 @@ class DeviceMediaService {
       );
 
       final int count = await album.assetCountAsync;
-      if (count == 0) return true;
+      
+      // Attempt to capture directory path from first asset
+      Directory? folderDir;
+      if (count > 0) {
+        final sample = await album.getAssetListRange(start: 0, end: 1);
+        if (sample.isNotEmpty) {
+          final file = await sample.first.file;
+          if (file != null) {
+            folderDir = file.parent;
+          }
+        }
+      }
 
-      final List<AssetEntity> assets = await album.getAssetListRange(
-        start: 0,
-        end: count,
-      );
+      bool deletedFromMediaStore = true;
+      if (count > 0) {
+        final List<AssetEntity> assets = await album.getAssetListRange(
+          start: 0,
+          end: count,
+        );
 
-      final List<String> assetIds = assets.map((a) => a.id).toList();
-      final List<String> deleted = await PhotoManager.editor.deleteWithIds(assetIds);
-      return deleted.isNotEmpty;
+        final List<String> assetIds = assets.map((a) => a.id).toList();
+        final List<String> deleted = await PhotoManager.editor.deleteWithIds(assetIds);
+        deletedFromMediaStore = deleted.isNotEmpty;
+      }
+
+      // If user granted MANAGE_EXTERNAL_STORAGE, also physically delete folder on disk
+      if (folderDir != null && await folderDir.exists()) {
+        try {
+          final hasManage = await hasManageStoragePermission();
+          if (hasManage) {
+            // Delete folder directory recursively if empty or cleaned
+            await folderDir.delete(recursive: true);
+            debugPrint('🎬 [NitPliks Delete] Deleted folder on disk: ${folderDir.path}');
+          }
+        } catch (e) {
+          debugPrint('🎬 [NitPliks Delete] Notice: Directory removal on disk skipped: $e');
+        }
+      }
+
+      await PhotoManager.clearFileCache();
+      return deletedFromMediaStore;
     } catch (e, stack) {
       debugPrint('Error deleting folder $folderId: $e\n$stack');
       return false;

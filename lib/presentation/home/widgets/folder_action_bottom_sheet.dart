@@ -41,13 +41,16 @@ class FolderActionBottomSheet extends ConsumerWidget {
           builder: (builderCtx, setDialogState) {
             return AlertDialog(
               backgroundColor: palette.surface,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              contentPadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               title: Text(
                 'Rename Folder',
                 style: TextStyle(
                   color: palette.textPrimary,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               content: Column(
@@ -58,23 +61,31 @@ class FolderActionBottomSheet extends ConsumerWidget {
                     controller: controller,
                     autofocus: true,
                     enabled: !isSubmitting,
-                    style: TextStyle(color: palette.textPrimary, fontSize: 14),
+                    style: TextStyle(
+                      color: palette.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    cursorColor: palette.primary,
                     decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
                       hintText: 'Enter new folder name',
-                      hintStyle: TextStyle(color: palette.textMuted),
+                      hintStyle: TextStyle(color: palette.textMuted, fontSize: 13),
                       errorText: errorMessage,
-                      errorStyle: const TextStyle(fontSize: 12, color: Colors.redAccent),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: palette.border),
+                      errorStyle: const TextStyle(fontSize: 11, color: Colors.redAccent),
+                      // Minimalist borderless style: only bottom line
+                      border: UnderlineInputBorder(
+                        borderSide: BorderSide(color: palette.border, width: 1.2),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: palette.border),
+                      enabledBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: palette.border, width: 1.2),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: palette.primary),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: palette.primary, width: 2),
+                      ),
+                      errorBorder: const UnderlineInputBorder(
+                        borderSide: BorderSide(color: Colors.redAccent, width: 1.5),
                       ),
                     ),
                     onSubmitted: (_) async {
@@ -95,14 +106,27 @@ class FolderActionBottomSheet extends ConsumerWidget {
               ),
               actions: [
                 TextButton(
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                   onPressed: isSubmitting ? null : () => Navigator.pop(dialogCtx),
-                  child: Text('Cancel', style: TextStyle(color: palette.textMuted)),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: palette.textMuted, fontSize: 13),
+                  ),
                 ),
+                const SizedBox(width: 4),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: palette.primary,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
                   ),
                   onPressed: isSubmitting
                       ? null
@@ -120,11 +144,11 @@ class FolderActionBottomSheet extends ConsumerWidget {
                         },
                   child: isSubmitting
                       ? const SizedBox(
-                          width: 16,
-                          height: 16,
+                          width: 14,
+                          height: 14,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text('Rename'),
+                      : const Text('Rename', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
               ],
             );
@@ -293,31 +317,48 @@ class FolderActionBottomSheet extends ConsumerWidget {
       context: context,
       builder: (dialogCtx) => AlertDialog(
         backgroundColor: palette.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 10),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
         title: Row(
           children: [
-            const Icon(LucideIcons.alertTriangle, color: Colors.redAccent, size: 22),
+            const Icon(LucideIcons.alertTriangle, color: Colors.redAccent, size: 20),
             const SizedBox(width: 8),
             Text(
               'Delete Folder?',
-              style: TextStyle(color: palette.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),
         content: Text(
-          'Are you sure you want to delete "${folder.name}" and all its ${folder.videoCount} videos from device storage? This cannot be undone.',
-          style: TextStyle(color: palette.textSecondary, fontSize: 14),
+          'Delete "${folder.name}" and all its ${folder.videoCount} ${folder.videoCount == 1 ? 'video' : 'videos'} from storage? This cannot be undone.',
+          style: TextStyle(color: palette.textSecondary, fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
             onPressed: () => Navigator.pop(dialogCtx),
-            child: Text('Cancel', style: TextStyle(color: palette.textMuted)),
+            child: Text('Cancel', style: TextStyle(color: palette.textMuted, fontSize: 13)),
           ),
+          const SizedBox(width: 4),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
             ),
             onPressed: () async {
               Navigator.pop(dialogCtx);
