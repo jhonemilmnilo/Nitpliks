@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:video_player/app/theme/palette_provider.dart';
 import 'package:video_player/domain/models/media_models.dart';
+import 'folder_action_bottom_sheet.dart';
 
 class FolderCard extends ConsumerWidget {
   final DeviceFolderModel folder;
@@ -22,29 +23,30 @@ class FolderCard extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          // Ultra compact padding for high list density
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: palette.surface,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             children: [
-              // Folder icon with flat accent container
+              // Compact Folder Icon Container
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: palette.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
                   LucideIcons.folder,
                   color: palette.primaryLight,
-                  size: 24,
+                  size: 18,
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 10),
 
               // Folder Name & Video Count & Date
               Expanded(
@@ -58,22 +60,22 @@ class FolderCard extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: palette.textPrimary,
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 2),
                     Row(
                       children: [
                         Text(
                           '${folder.videoCount} ${folder.videoCount == 1 ? 'video' : 'videos'}',
                           style: TextStyle(
                             color: palette.textMuted,
-                            fontSize: 12,
+                            fontSize: 11,
                           ),
                         ),
                         if (folder.formattedDate.isNotEmpty) ...[
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Container(
                             width: 3,
                             height: 3,
@@ -82,12 +84,12 @@ class FolderCard extends ConsumerWidget {
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Text(
                             folder.formattedDate,
                             style: TextStyle(
                               color: palette.textMuted,
-                              fontSize: 11,
+                              fontSize: 10,
                             ),
                           ),
                         ],
@@ -97,10 +99,23 @@ class FolderCard extends ConsumerWidget {
                 ),
               ),
 
-              Icon(
-                LucideIcons.chevronRight,
-                color: palette.textMuted,
-                size: 18,
+              // 3-dots Contextual Action Menu Button
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () {
+                    FolderActionBottomSheet.show(context, folder);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Icon(
+                      LucideIcons.moreVertical,
+                      color: palette.textMuted,
+                      size: 18,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

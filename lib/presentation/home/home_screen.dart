@@ -68,14 +68,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
-        title: Text(
-          'NitPliks',
-          style: TextStyle(
-            color: palette.textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-            letterSpacing: -0.5,
-          ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Image.asset(
+                'assets/icons/app_logo.png',
+                width: 26,
+                height: 26,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'NitPliks',
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                letterSpacing: -0.5,
+              ),
+            ),
+          ],
         ),
         actions: [
           IconButton(
@@ -313,7 +328,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           (context, index) {
                             final folder = filteredFolders[index];
                             return Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.only(bottom: 6),
                               child: FolderCard(
                                 folder: folder,
                                 onTap: () {

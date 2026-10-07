@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../domain/models/media_models.dart';
@@ -132,6 +133,72 @@ class DeviceMediaService {
     } catch (e, stack) {
       debugPrint('Error loading videos for folder $folderId: $e\n$stack');
       return [];
+    }
+  }
+
+  /// Delete all video assets in a folder using PhotoManager
+  static Future<bool> deleteFolderVideos(String folderId) async {
+    try {
+      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+        type: RequestType.video,
+        onlyAll: false,
+      );
+
+      final album = albums.firstWhere(
+        (a) => a.id == folderId,
+        orElse: () => albums.first,
+      );
+
+      final int count = await album.assetCountAsync;
+      if (count == 0) return true;
+
+      final List<AssetEntity> assets = await album.getAssetListRange(
+        start: 0,
+        end: count,
+      );
+
+      final List<String> assetIds = assets.map((a) => a.id).toList();
+      final List<String> deleted = await PhotoManager.editor.deleteWithIds(assetIds);
+      return deleted.isNotEmpty;
+    } catch (e, stack) {
+      debugPrint('Error deleting folder $folderId: $e\n$stack');
+      return false;
+    }
+  }
+
+  /// Safe rename directory on disk
+  static Future<bool> renameFolder(String folderId, String newName) async {
+    try {
+      final List<AssetPathEntity> albums = await PhotoManager.getAssetPathList(
+        type: RequestType.video,
+        onlyAll: false,
+      );
+
+      final album = albums.firstWhere(
+        (a) => a.id == folderId,
+        orElse: () => albums.first,
+      );
+
+      final List<AssetEntity> assets = await album.getAssetListRange(start: 0, end: 1);
+      if (assets.isEmpty) return false;
+
+      final file = await assets.first.file;
+      if (file == null) return false;
+
+      final currentDir = file.parent;
+      final parentDir = currentDir.parent;
+      final newDirPath = '${parentDir.path}${Platform.pathSeparator}$newName';
+
+      final newDir = Directory(newDirPath);
+      if (await newDir.exists()) {
+        return false; // Already exists
+      }
+
+      await currentDir.rename(newDirPath);
+      return true;
+    } catch (e, stack) {
+      debugPrint('Error renaming folder: $e\n$stack');
+      return false;
     }
   }
 }
