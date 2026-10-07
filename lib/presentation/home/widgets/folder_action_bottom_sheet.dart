@@ -6,6 +6,11 @@ import 'package:video_player/data/services/device_media_service.dart';
 import 'package:video_player/domain/models/media_models.dart';
 import 'package:video_player/presentation/home/providers/media_provider.dart';
 
+enum FolderMenuAction {
+  rename,
+  delete,
+}
+
 class FolderActionBottomSheet extends ConsumerWidget {
   final DeviceFolderModel folder;
 
@@ -14,8 +19,8 @@ class FolderActionBottomSheet extends ConsumerWidget {
     required this.folder,
   });
 
-  static Future<void> show(BuildContext context, DeviceFolderModel folder) {
-    return showModalBottomSheet(
+  static Future<FolderMenuAction?> show(BuildContext context, DeviceFolderModel folder) {
+    return showModalBottomSheet<FolderMenuAction>(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
@@ -23,7 +28,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
     );
   }
 
-  void _showRenameDialog(BuildContext context, WidgetRef ref) {
+  static void showRenameDialog(BuildContext context, WidgetRef ref, DeviceFolderModel folder) {
     final palette = ref.read(paletteProvider);
     final controller = TextEditingController(text: folder.name);
     bool isSubmitting = false;
@@ -78,6 +83,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
                         dialogCtx: dialogCtx,
                         parentContext: context,
                         ref: ref,
+                        folder: folder,
                         newName: controller.text,
                         getIsSubmitting: () => isSubmitting,
                         setIsSubmitting: (val) => setDialogState(() => isSubmitting = val),
@@ -105,6 +111,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
                             dialogCtx: dialogCtx,
                             parentContext: context,
                             ref: ref,
+                            folder: folder,
                             newName: controller.text,
                             getIsSubmitting: () => isSubmitting,
                             setIsSubmitting: (val) => setDialogState(() => isSubmitting = val),
@@ -127,10 +134,11 @@ class FolderActionBottomSheet extends ConsumerWidget {
     );
   }
 
-  Future<void> _performRename({
+  static Future<void> _performRename({
     required BuildContext dialogCtx,
     required BuildContext parentContext,
     required WidgetRef ref,
+    required DeviceFolderModel folder,
     required String newName,
     required bool Function() getIsSubmitting,
     required void Function(bool) setIsSubmitting,
@@ -191,7 +199,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
     }
   }
 
-  void _showStoragePermissionDialog(BuildContext context, WidgetRef ref) {
+  static void _showStoragePermissionDialog(BuildContext context, WidgetRef ref) {
     final palette = ref.read(paletteProvider);
 
     showDialog(
@@ -239,7 +247,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
     );
   }
 
-  void _showDeleteDialog(BuildContext context, WidgetRef ref) {
+  static void showDeleteDialog(BuildContext context, WidgetRef ref, DeviceFolderModel folder) {
     final palette = ref.read(paletteProvider);
 
     showDialog(
@@ -379,8 +387,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
                   style: TextStyle(color: palette.textPrimary, fontSize: 15, fontWeight: FontWeight.w500),
                 ),
                 onTap: () {
-                  Navigator.pop(context);
-                  _showRenameDialog(context, ref);
+                  Navigator.pop(context, FolderMenuAction.rename);
                 },
               ),
 
@@ -393,8 +400,7 @@ class FolderActionBottomSheet extends ConsumerWidget {
                   style: TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.w500),
                 ),
                 onTap: () {
-                  Navigator.pop(context);
-                  _showDeleteDialog(context, ref);
+                  Navigator.pop(context, FolderMenuAction.delete);
                 },
               ),
               const SizedBox(height: 8),

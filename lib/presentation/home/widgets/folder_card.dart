@@ -104,8 +104,18 @@ class FolderCard extends ConsumerWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () {
-                    FolderActionBottomSheet.show(context, folder);
+                  onTap: () async {
+                    final action = await FolderActionBottomSheet.show(context, folder);
+                    if (!context.mounted || action == null) return;
+
+                    switch (action) {
+                      case FolderMenuAction.rename:
+                        FolderActionBottomSheet.showRenameDialog(context, ref, folder);
+                        break;
+                      case FolderMenuAction.delete:
+                        FolderActionBottomSheet.showDeleteDialog(context, ref, folder);
+                        break;
+                    }
                   },
                   child: Padding(
                     padding: const EdgeInsets.all(6),
