@@ -6,6 +6,7 @@ import 'package:lucide_icons/lucide_icons.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../app/theme/app_palettes.dart';
@@ -68,9 +69,13 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   // Pro Player Features (Phase 5 & Enhancements)
   BoxFit _aspectRatio = BoxFit.contain;
   double _playbackSpeed = 1.0;
+  bool _rememberSpeed = true;
   bool _isScreenLocked = false;
   bool _isSpeedDrawerOpen = false;
   bool _isLandscape = false;
+
+  static const String _prefRememberSpeedKey = 'nitpliks_remember_playback_speed';
+  static const String _prefCachedSpeedKey = 'nitpliks_cached_playback_speed';
 
   VideoModel get _currentVideo => widget.videos[_currentIndex];
   bool get _hasPrevious => _currentIndex > 0;
@@ -132,9 +137,40 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     });
 
-    // 6. Open video & start auto-hide controls timer
-    _openCurrentVideo();
+    // 6. Load cached speed preferences & open video
+    _initSpeedPreferencesAndOpen();
     _startHideControlsTimer();
+  }
+
+  Future<void> _initSpeedPreferencesAndOpen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final remember = prefs.getBool(_prefRememberSpeedKey) ?? true;
+      final cachedRate = prefs.getDouble(_prefCachedSpeedKey) ?? 1.0;
+
+      if (mounted) {
+        setState(() {
+          _rememberSpeed = remember;
+          _playbackSpeed = remember ? cachedRate : 1.0;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading speed preferences: $e');
+    }
+
+    await _openCurrentVideo();
+  }
+
+  Future<void> _saveSpeedPreferences({required double speed, required bool remember}) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefRememberSpeedKey, remember);
+      if (remember) {
+        await prefs.setDouble(_prefCachedSpeedKey, speed);
+      }
+    } catch (e) {
+      debugPrint('Error saving speed preferences: $e');
+    }
   }
 
   Future<void> _initHardwareControls() async {
@@ -155,6 +191,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Future<void> _openCurrentVideo() async {
     try {
       await _player.open(Media(_currentVideo.path));
+      // Apply persisted or default playback speed
+      final targetRate = _rememberSpeed ? _playbackSpeed : 1.0;
+      await _player.setRate(targetRate);
+      if (mounted && !_rememberSpeed && _playbackSpeed != 1.0) {
+        setState(() => _playbackSpeed = 1.0);
+      }
     } catch (e) {
       debugPrint('Error opening video ${_currentVideo.path}: $e');
     }
@@ -607,97 +649,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                         ],
                                       ),
                                     ),
-                                    const SizedBox(width: 8),
-
-                                    // Aspect Ratio Toggle Pill
-                                    Material(
-                                      color: Colors.black45,
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: _cycleAspectRatio,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(_aspectRatioIcon, color: Colors.white, size: 16),
-                                              const SizedBox(width: 5),
-                                              Text(
-                                                _aspectRatioLabel,
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-
-                                    // Rotate Screen Pill
-                                    Material(
-                                      color: Colors.black45,
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: _toggleOrientation,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                _isLandscape ? LucideIcons.smartphone : LucideIcons.rotateCcw,
-                                                color: Colors.white,
-                                                size: 15,
-                                              ),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                _isLandscape ? 'Portrait' : 'Rotate',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-
-                                    // Playback Speed Pill (Opens Transparent Right Drawer)
-                                    Material(
-                                      color: _isSpeedDrawerOpen ? palette.primary.withValues(alpha: 0.3) : Colors.black45,
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(8),
-                                        onTap: _toggleSpeedDrawer,
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(LucideIcons.gauge, color: palette.primary, size: 15),
-                                              const SizedBox(width: 4),
-                                              Text(
-                                                '${_playbackSpeed}x',
-                                                style: TextStyle(
-                                                  color: palette.primary,
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -843,6 +794,106 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                               color: Colors.white.withValues(alpha: 0.7),
                                               fontSize: 12,
                                               fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+
+                                    // ── BOTTOM ACTION DOCK ──
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          // 1. Aspect Ratio Pill
+                                          Material(
+                                            color: Colors.white.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: InkWell(
+                                              borderRadius: BorderRadius.circular(8),
+                                              onTap: _cycleAspectRatio,
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(_aspectRatioIcon, color: Colors.white, size: 16),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      _aspectRatioLabel,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 11.5,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                          // 2. Rotate Screen Pill
+                                          Material(
+                                            color: Colors.white.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: InkWell(
+                                              borderRadius: BorderRadius.circular(8),
+                                              onTap: _toggleOrientation,
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      _isLandscape ? LucideIcons.smartphone : LucideIcons.rotateCcw,
+                                                      color: Colors.white,
+                                                      size: 15,
+                                                    ),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      _isLandscape ? 'Portrait' : 'Rotate',
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 11.5,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+
+                                          // 3. Playback Speed Pill (Opens Transparent Right Drawer)
+                                          Material(
+                                            color: _isSpeedDrawerOpen
+                                                ? palette.primary.withValues(alpha: 0.35)
+                                                : Colors.white.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(8),
+                                            child: InkWell(
+                                              borderRadius: BorderRadius.circular(8),
+                                              onTap: _toggleSpeedDrawer,
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(LucideIcons.gauge, color: palette.primary, size: 15),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      '${_playbackSpeed}x',
+                                                      style: TextStyle(
+                                                        color: palette.primary,
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -1064,7 +1115,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   Widget _buildSpeedDrawerOverlay(AppPalette palette) {
     if (!_isSpeedDrawerOpen) return const SizedBox.shrink();
 
-    final speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0];
+    final speeds = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
 
     return Stack(
       children: [
@@ -1085,15 +1136,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           top: 0,
           bottom: 0,
           right: 0,
-          width: 220,
+          width: 280,
           child: GestureDetector(
             // Prevent taps inside drawer from propagating to the outside dismiss barrier
             onTap: () {},
             child: Container(
               decoration: BoxDecoration(
                 color: palette.isDark
-                    ? const Color(0xFF0F172A).withValues(alpha: 0.88)
-                    : const Color(0xFF1E293B).withValues(alpha: 0.90),
+                    ? const Color(0xFF0F172A).withValues(alpha: 0.92)
+                    : const Color(0xFF1E293B).withValues(alpha: 0.94),
                 border: const Border(
                   left: BorderSide(color: Colors.white12, width: 1),
                 ),
@@ -1113,10 +1164,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                               Icon(LucideIcons.gauge, color: palette.primary, size: 18),
                               const SizedBox(width: 8),
                               const Text(
-                                'Speed',
+                                'Playback Speed',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: -0.3,
                                 ),
@@ -1133,46 +1184,230 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Divider(color: Colors.white12, height: 1),
+                      const SizedBox(height: 12),
+
+                      // Remember Speed / Cache Toggle Card
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Remember Speed',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Apply to all videos',
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.55),
+                                      fontSize: 10.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Transform.scale(
+                              scale: 0.75,
+                              child: Switch(
+                                value: _rememberSpeed,
+                                activeThumbColor: palette.primary,
+                                activeTrackColor: palette.primary.withValues(alpha: 0.4),
+                                inactiveThumbColor: Colors.white60,
+                                inactiveTrackColor: Colors.white12,
+                                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                onChanged: (val) {
+                                  setState(() => _rememberSpeed = val);
+                                  _saveSpeedPreferences(
+                                    speed: _playbackSpeed,
+                                    remember: val,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Large Active Speed Indicator Readout
+                      Center(
+                        child: Column(
+                          children: [
+                            Text(
+                              '${_playbackSpeed.toStringAsFixed(_playbackSpeed.truncateToDouble() == _playbackSpeed ? 1 : 2)}x',
+                              style: TextStyle(
+                                color: palette.primary,
+                                fontSize: 32,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -1,
+                              ),
+                            ),
+                            Text(
+                              _playbackSpeed == 1.0 ? 'Normal Speed' : (_playbackSpeed > 1.0 ? 'Fast Motion' : 'Slow Motion'),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.5),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Horizontal Ruler / Carousel Wheel Dial
+                      Text(
+                        'SWIPE WHEEL',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
                       const SizedBox(height: 8),
 
-                      // Speed Items List
+                      Container(
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white10),
+                        ),
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          itemCount: speeds.length,
+                          itemBuilder: (context, index) {
+                            final sp = speeds[index];
+                            final isSelected = _playbackSpeed == sp;
+                            return GestureDetector(
+                              onTap: () {
+                                _player.setRate(sp);
+                                setState(() => _playbackSpeed = sp);
+                                _saveSpeedPreferences(
+                                  speed: sp,
+                                  remember: _rememberSpeed,
+                                );
+                              },
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                width: 52,
+                                margin: const EdgeInsets.symmetric(horizontal: 4),
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? palette.primary.withValues(alpha: 0.25)
+                                      : Colors.white.withValues(alpha: 0.03),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected ? palette.primary : Colors.white12,
+                                    width: isSelected ? 1.5 : 1,
+                                  ),
+                                ),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    // Ruler tick indicator
+                                    Container(
+                                      width: isSelected ? 14 : 6,
+                                      height: 3,
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? palette.primary : Colors.white30,
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      '${sp}x',
+                                      style: TextStyle(
+                                        color: isSelected ? palette.primary : Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Quick Preset Chips Header
+                      Text(
+                        'QUICK SELECT',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Quick Presets Grid / List
                       Expanded(
                         child: ListView(
                           padding: EdgeInsets.zero,
-                          children: speeds.map((sp) {
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            [0.5, '0.5x Slow'],
+                            [1.0, '1.0x Normal'],
+                            [1.25, '1.25x Brisk'],
+                            [1.5, '1.5x Fast'],
+                            [2.0, '2.0x Double'],
+                          ].map((item) {
+                            final sp = item[0] as double;
+                            final label = item[1] as String;
                             final isSelected = _playbackSpeed == sp;
                             return Container(
                               margin: const EdgeInsets.only(bottom: 6),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? palette.primary.withValues(alpha: 0.22)
+                                    ? palette.primary.withValues(alpha: 0.20)
                                     : Colors.transparent,
-                                borderRadius: BorderRadius.circular(10),
+                                borderRadius: BorderRadius.circular(8),
                                 border: isSelected
                                     ? Border.all(color: palette.primary.withValues(alpha: 0.5))
-                                    : null,
+                                    : Border.all(color: Colors.white.withValues(alpha: 0.05)),
                               ),
                               child: Material(
                                 color: Colors.transparent,
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(10),
+                                  borderRadius: BorderRadius.circular(8),
                                   onTap: () {
                                     _player.setRate(sp);
-                                    setState(() {
-                                      _playbackSpeed = sp;
-                                    });
-                                    _closeSpeedDrawer();
+                                    setState(() => _playbackSpeed = sp);
+                                    _saveSpeedPreferences(
+                                      speed: sp,
+                                      remember: _rememberSpeed,
+                                    );
                                   },
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          '${sp}x ${sp == 1.0 ? '(Normal)' : ''}',
+                                          label,
                                           style: TextStyle(
                                             color: isSelected ? palette.primary : Colors.white,
-                                            fontSize: 14,
+                                            fontSize: 13,
                                             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                                           ),
                                         ),
