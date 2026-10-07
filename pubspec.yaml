@@ -57,6 +57,7 @@ dependencies:
   # UI Design, Icons & Utilities
   lucide_icons: ^0.257.0
   intl: ^0.20.2
+  fc_native_video_thumbnail: ^2.2.0
 
 dev_dependencies:
   flutter_test:

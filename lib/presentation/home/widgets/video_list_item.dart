@@ -1,8 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:video_player/app/theme/palette_provider.dart';
+import 'package:video_player/data/services/video_thumbnail_service.dart';
 import 'package:video_player/domain/models/media_models.dart';
 
 class VideoListItem extends ConsumerWidget {
@@ -43,37 +45,40 @@ class VideoListItem extends ConsumerWidget {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      if (video.asset != null)
-                        FutureBuilder(
-                          future: video.asset!.thumbnailDataWithSize(
-                            const ThumbnailSize(240, 150),
-                            quality: 80,
-                          ),
-                          builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.done && snapshot.data != null) {
-                              return Image.memory(
-                                snapshot.data!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => _buildFallbackThumbnail(palette),
-                              );
-                            }
-                            if (snapshot.hasError) {
-                              return _buildFallbackThumbnail(palette);
-                            }
-                            return Center(
-                              child: SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: palette.primary.withValues(alpha: 0.5),
-                                ),
-                              ),
+                      // High quality 1-minute frame thumbnail
+                      FutureBuilder<String?>(
+                        future: VideoThumbnailService.getThumbnailPath(
+                          videoPath: video.path,
+                          duration: video.duration,
+                        ),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.done &&
+                              snapshot.data != null &&
+                              snapshot.data!.isNotEmpty) {
+                            return Image.file(
+                              File(snapshot.data!),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => _buildAssetOrFallback(palette),
                             );
-                          },
-                        )
-                      else
-                        _buildFallbackThumbnail(palette),
+                          }
+
+                          if (snapshot.connectionState == ConnectionState.done && snapshot.data == null) {
+                            return _buildAssetOrFallback(palette);
+                          }
+
+                          // Subtle pulsing placeholder while loading 1-minute frame
+                          return Center(
+                            child: SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: palette.primary.withValues(alpha: 0.5),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
 
                       // Duration Badge (bottom right)
                       Positioned(
@@ -157,6 +162,28 @@ class VideoListItem extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Widget _buildAssetOrFallback(dynamic palette) {
+    if (video.asset != null) {
+      return FutureBuilder(
+        future: video.asset!.thumbnailDataWithSize(
+          const ThumbnailSize(240, 150),
+          quality: 80,
+        ),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done && snapshot.data != null) {
+            return Image.memory(
+              snapshot.data!,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) => _buildFallbackThumbnail(palette),
+            );
+          }
+          return _buildFallbackThumbnail(palette);
+        },
+      );
+    }
+    return _buildFallbackThumbnail(palette);
   }
 
   Widget _buildFallbackThumbnail(dynamic palette) {
