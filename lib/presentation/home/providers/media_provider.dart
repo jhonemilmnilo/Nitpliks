@@ -14,3 +14,6 @@ final folderVideosProvider = FutureProvider.family<List<VideoModel>, String>((re
 
 /// State provider to track folder ID currently undergoing rename/update for skeleton animation
 final updatingFolderIdProvider = StateProvider<String?>((ref) => null);
+
+/// State provider to track video ID currently undergoing rename/update for skeleton animation
+final updatingVideoIdProvider = StateProvider<String?>((ref) => null);

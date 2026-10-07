@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../domain/models/media_models.dart';
@@ -303,6 +304,70 @@ class DeviceMediaService {
     } catch (e, stack) {
       debugPrint('🎬 [NitPliks Rename] Unknown Exception: $e\n$stack');
       return RenameResult.unknownError;
+    }
+  }
+
+  /// Rename a single video file on disk & MediaStore
+  static Future<RenameResult> renameVideo(String videoPath, String newBaseName) async {
+    final trimmed = newBaseName.trim();
+    if (trimmed.isEmpty) return RenameResult.invalidName;
+
+    final illegalChars = RegExp(r'[\\/:*?"<>|]');
+    if (illegalChars.hasMatch(trimmed)) return RenameResult.invalidCharacters;
+
+    final file = File(videoPath);
+    if (!await file.exists()) return RenameResult.fileNotFound;
+
+    final parentDir = file.parent;
+    final extension = p.extension(videoPath);
+    final targetFileName = trimmed.endsWith(extension) ? trimmed : '$trimmed$extension';
+    final targetPath = '${parentDir.path}${Platform.pathSeparator}$targetFileName';
+
+    if (file.path.toLowerCase() == targetPath.toLowerCase()) {
+      return RenameResult.sameName;
+    }
+
+    final targetFile = File(targetPath);
+    if (await targetFile.exists()) {
+      return RenameResult.alreadyExists;
+    }
+
+    final hasManage = await hasManageStoragePermission();
+    if (!hasManage) {
+      return RenameResult.permissionDenied;
+    }
+
+    try {
+      await file.rename(targetPath);
+      await PhotoManager.clearFileCache();
+      return RenameResult.success;
+    } on FileSystemException catch (e) {
+      debugPrint('FileSystemException renaming video: $e');
+      return RenameResult.permissionDenied;
+    } catch (e, stack) {
+      debugPrint('Error renaming video: $e\n$stack');
+      return RenameResult.unknownError;
+    }
+  }
+
+  /// Delete a single video file from MediaStore and physical disk
+  static Future<bool> deleteSingleVideo(String videoId, String videoPath) async {
+    try {
+      final List<String> deleted = await PhotoManager.editor.deleteWithIds([videoId]);
+      final file = File(videoPath);
+      if (await file.exists()) {
+        try {
+          final hasManage = await hasManageStoragePermission();
+          if (hasManage) {
+            await file.delete();
+          }
+        } catch (_) {}
+      }
+      await PhotoManager.clearFileCache();
+      return deleted.isNotEmpty || !await file.exists();
+    } catch (e) {
+      debugPrint('Error deleting video $videoId: $e');
+      return false;
     }
   }
 }
