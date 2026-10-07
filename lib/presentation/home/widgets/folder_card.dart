@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:video_player/app/theme/app_theme.dart';
 import 'package:video_player/app/theme/palette_provider.dart';
 import 'package:video_player/domain/models/media_models.dart';
 
@@ -69,8 +68,8 @@ class FolderCard extends ConsumerWidget {
                       folder.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
+                      style: TextStyle(
+                        color: palette.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),
@@ -80,8 +79,8 @@ class FolderCard extends ConsumerWidget {
                       children: [
                         Text(
                           '${folder.videoCount} ${folder.videoCount == 1 ? 'video' : 'videos'}',
-                          style: const TextStyle(
-                            color: AppTheme.textMuted,
+                          style: TextStyle(
+                            color: palette.textMuted,
                             fontSize: 12,
                           ),
                         ),
@@ -90,16 +89,16 @@ class FolderCard extends ConsumerWidget {
                           Container(
                             width: 3,
                             height: 3,
-                            decoration: const BoxDecoration(
-                              color: AppTheme.textMuted,
+                            decoration: BoxDecoration(
+                              color: palette.textMuted,
                               shape: BoxShape.circle,
                             ),
                           ),
                           const SizedBox(width: 8),
                           Text(
                             folder.formattedDate,
-                            style: const TextStyle(
-                              color: AppTheme.textMuted,
+                            style: TextStyle(
+                              color: palette.textMuted,
                               fontSize: 11,
                             ),
                           ),
@@ -110,9 +109,9 @@ class FolderCard extends ConsumerWidget {
                 ),
               ),
 
-              const Icon(
+              Icon(
                 LucideIcons.chevronRight,
-                color: AppTheme.textMuted,
+                color: palette.textMuted,
                 size: 18,
               ),
             ],

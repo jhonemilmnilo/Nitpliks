@@ -68,10 +68,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       backgroundColor: palette.background,
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'NitPliks',
           style: TextStyle(
-            color: AppTheme.textPrimary,
+            color: palette.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 20,
             letterSpacing: -0.5,
@@ -79,7 +79,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(LucideIcons.rotateCw, color: AppTheme.textSecondary, size: 20),
+            icon: Icon(LucideIcons.rotateCw, color: palette.textSecondary, size: 20),
             tooltip: 'Rescan Folders',
             onPressed: () {
               ref.invalidate(deviceFoldersProvider);
@@ -263,8 +263,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           children: [
                             Text(
                               'Folders (${filteredFolders.length})',
-                              style: const TextStyle(
-                                color: AppTheme.textPrimary,
+                              style: TextStyle(
+                                color: palette.textPrimary,
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -290,8 +290,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     const SizedBox(width: 6),
                                     Text(
                                       sortOption.label,
-                                      style: const TextStyle(
-                                        color: AppTheme.textSecondary,
+                                      style: TextStyle(
+                                        color: palette.textSecondary,
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                       ),
@@ -376,22 +376,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                         child: TextField(
                           controller: _searchController,
-                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                          style: TextStyle(color: palette.textPrimary, fontSize: 14),
                           decoration: InputDecoration(
                             hintText: 'Search folders...',
-                            hintStyle: const TextStyle(color: AppTheme.textMuted, fontSize: 14),
+                            hintStyle: TextStyle(color: palette.textMuted, fontSize: 14),
                             border: InputBorder.none,
-                            prefixIcon: const Icon(
+                            prefixIcon: Icon(
                               LucideIcons.search,
                               size: 18,
-                              color: AppTheme.textMuted,
+                              color: palette.textMuted,
                             ),
                             suffixIcon: _searchQuery.isNotEmpty
                                 ? IconButton(
-                                    icon: const Icon(
+                                    icon: Icon(
                                       LucideIcons.x,
                                       size: 16,
-                                      color: AppTheme.textMuted,
+                                      color: palette.textMuted,
                                     ),
                                     onPressed: () {
                                       setState(() {
@@ -434,10 +434,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: InkWell(
                           borderRadius: BorderRadius.circular(16),
                           onTap: _openSettingsModal,
-                          child: const Center(
+                          child: Center(
                             child: Icon(
                               LucideIcons.settings,
-                              color: AppTheme.textPrimary,
+                              color: palette.textPrimary,
                               size: 20,
                             ),
                           ),

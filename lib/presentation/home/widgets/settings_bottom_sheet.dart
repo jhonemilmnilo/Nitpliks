@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:video_player/app/theme/app_palettes.dart';
-import 'package:video_player/app/theme/app_theme.dart';
 import 'package:video_player/app/theme/palette_provider.dart';
 
-class SettingsBottomSheet extends ConsumerWidget {
+class SettingsBottomSheet extends ConsumerStatefulWidget {
   const SettingsBottomSheet({super.key});
 
   static Future<void> show(BuildContext context) {
@@ -18,8 +17,24 @@ class SettingsBottomSheet extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsBottomSheet> createState() => _SettingsBottomSheetState();
+}
+
+class _SettingsBottomSheetState extends ConsumerState<SettingsBottomSheet> {
+  bool _showDarkMode = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default the tab based on currently active palette mode
+    final current = ref.read(paletteProvider);
+    _showDarkMode = current.isDark;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final currentPalette = ref.watch(paletteProvider);
+    final displayedPalettes = _showDarkMode ? AppPalettes.darkPalettes : AppPalettes.lightPalettes;
 
     return Container(
       decoration: BoxDecoration(
@@ -28,7 +43,7 @@ class SettingsBottomSheet extends ConsumerWidget {
         border: Border.all(color: currentPalette.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.5),
+            color: Colors.black.withValues(alpha: 0.35),
             blurRadius: 20,
             offset: const Offset(0, -5),
           ),
@@ -47,7 +62,7 @@ class SettingsBottomSheet extends ConsumerWidget {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.textMuted.withValues(alpha: 0.4),
+                    color: currentPalette.textMuted.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -70,23 +85,23 @@ class SettingsBottomSheet extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Appearance & Theme',
                         style: TextStyle(
-                          color: AppTheme.textPrimary,
+                          color: currentPalette.textPrimary,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           letterSpacing: -0.3,
                         ),
                       ),
-                      SizedBox(height: 2),
+                      const SizedBox(height: 2),
                       Text(
-                        'Select a color palette for NitPliks',
+                        'Select mode and dynamic color palette',
                         style: TextStyle(
-                          color: AppTheme.textMuted,
+                          color: currentPalette.textMuted,
                           fontSize: 12,
                         ),
                       ),
@@ -96,11 +111,123 @@ class SettingsBottomSheet extends ConsumerWidget {
               ),
               const SizedBox(height: 18),
 
+              // Dark / Light Mode Segmented Toggle Switch
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: currentPalette.surfaceLight,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: currentPalette.border),
+                ),
+                child: Row(
+                  children: [
+                    // Dark Mode Tab
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _showDarkMode = true;
+                          });
+                          if (!currentPalette.isDark) {
+                            ref.read(paletteProvider.notifier).setPalette(AppPalettes.cyberIndigo);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: _showDarkMode ? currentPalette.surface : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: _showDarkMode
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 4,
+                                    ),
+                                  ]
+                                : [],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.moon,
+                                size: 16,
+                                color: _showDarkMode ? currentPalette.primary : currentPalette.textMuted,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Dark Mode',
+                                style: TextStyle(
+                                  color: _showDarkMode ? currentPalette.textPrimary : currentPalette.textMuted,
+                                  fontSize: 13,
+                                  fontWeight: _showDarkMode ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Light Mode Tab
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _showDarkMode = false;
+                          });
+                          if (currentPalette.isDark) {
+                            ref.read(paletteProvider.notifier).setPalette(AppPalettes.cleanFrost);
+                          }
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: !_showDarkMode ? currentPalette.surface : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: !_showDarkMode
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 4,
+                                    ),
+                                  ]
+                                : [],
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                LucideIcons.sun,
+                                size: 16,
+                                color: !_showDarkMode ? currentPalette.primary : currentPalette.textMuted,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Light Mode',
+                                style: TextStyle(
+                                  color: !_showDarkMode ? currentPalette.textPrimary : currentPalette.textMuted,
+                                  fontSize: 13,
+                                  fontWeight: !_showDarkMode ? FontWeight.w600 : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
               // Color Palette Grid
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: AppPalettes.all.length,
+                itemCount: displayedPalettes.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
                   mainAxisSpacing: 10,
@@ -108,7 +235,7 @@ class SettingsBottomSheet extends ConsumerWidget {
                   childAspectRatio: 2.3,
                 ),
                 itemBuilder: (context, index) {
-                  final palette = AppPalettes.all[index];
+                  final palette = displayedPalettes[index];
                   final isSelected = palette.id == currentPalette.id;
 
                   return Material(
@@ -123,10 +250,10 @@ class SettingsBottomSheet extends ConsumerWidget {
                         decoration: BoxDecoration(
                           color: isSelected
                               ? palette.primary.withValues(alpha: 0.15)
-                              : palette.surfaceLight,
+                              : currentPalette.surfaceLight,
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: isSelected ? palette.primary : palette.border,
+                            color: isSelected ? palette.primary : currentPalette.border,
                             width: isSelected ? 1.5 : 1.0,
                           ),
                         ),
@@ -145,7 +272,7 @@ class SettingsBottomSheet extends ConsumerWidget {
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: palette.primary.withValues(alpha: 0.4),
+                                    color: palette.primary.withValues(alpha: 0.35),
                                     blurRadius: 6,
                                   ),
                                 ],
@@ -168,8 +295,8 @@ class SettingsBottomSheet extends ConsumerWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   color: isSelected
-                                      ? AppTheme.textPrimary
-                                      : AppTheme.textSecondary,
+                                      ? currentPalette.textPrimary
+                                      : currentPalette.textSecondary,
                                   fontSize: 13,
                                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                                 ),
