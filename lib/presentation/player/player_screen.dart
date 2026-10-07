@@ -76,9 +76,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   // Resume Playback Persistence State
   int _lastAutosaveMs = 0;
-  bool _showResumeToast = false;
-  String _resumedFromText = '';
-  Timer? _resumeToastTimer;
 
   static const String _prefRememberSpeedKey = 'nitpliks_remember_playback_speed';
   static const String _prefCachedSpeedKey = 'nitpliks_cached_playback_speed';
@@ -92,6 +89,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
+    // Seed duration from metadata immediately to prevent slider ratio glitches (0 duration division)
+    if (_currentVideo.duration > Duration.zero) {
+      _duration = _currentVideo.duration;
+    }
 
     // 1. Keep display awake
     WakelockPlus.enable();
@@ -124,12 +125,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
     _positionSub = _player.stream.position.listen((pos) {
       if (mounted && !_isDraggingScrubber && _activeGesture != _GestureType.seek) {
-        // Prevent initial 0:00 emit from wiping UI before seeking to resume point
-        if (pos > Duration.zero || _position == Duration.zero) {
-          setState(() => _position = pos);
-        }
+        setState(() => _position = pos);
       }
-      // Throttled Autosave every 2.5 seconds (Only save if pos > 3 seconds)
+      // Throttled Autosave every 2.5 seconds (Only save if pos > 3 seconds and duration is known)
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - _lastAutosaveMs > 2500 && pos.inMilliseconds >= 3000) {
         _lastAutosaveMs = now;
@@ -138,7 +136,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     });
 
     _durationSub = _player.stream.duration.listen((dur) {
-      if (mounted) setState(() => _duration = dur);
+      if (mounted && dur > Duration.zero) {
+        setState(() => _duration = dur);
+      }
     });
 
     // Auto-play next video in folder when finished & clear saved position
@@ -276,44 +276,34 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
       Duration? startOffset;
       if (!isCompleted && savedPosMs > 3000) {
-        startOffset = Duration(milliseconds: savedPosMs);
-        debugPrint('🎬 [NITPLIKS SQLITE LOAD] Target resume startOffset: $startOffset');
+        // Apply 10-second context catch-up buffer (rewinds 10s back from exact stop point)
+        const rewindBufferMs = 10000;
+        final effectivePosMs = (savedPosMs > rewindBufferMs) ? (savedPosMs - rewindBufferMs) : 0;
+        startOffset = Duration(milliseconds: effectivePosMs);
+        debugPrint('🎬 [NITPLIKS SQLITE LOAD] Saved: ${savedPosMs}ms -> Target 10s-rewind startOffset: $startOffset');
       }
 
       // 2. Open media with start offset
       if (startOffset != null && startOffset > Duration.zero) {
-        debugPrint('🎬 [NITPLIKS RESUME] Opening video with target startOffset: $startOffset');
+        final resumeOffset = startOffset;
+        debugPrint('🎬 [NITPLIKS RESUME] Opening video with target startOffset: $resumeOffset');
         
         // Open media
-        await _player.open(Media(_currentVideo.path, start: startOffset), play: true);
+        await _player.open(Media(_currentVideo.path, start: resumeOffset), play: true);
 
         // Reliable seek pipeline: Wait for duration > 0 (meaning native media is demuxed and decoder is active)
         _player.stream.duration.firstWhere((dur) => dur > Duration.zero).then((dur) async {
-          debugPrint('🎬 [NITPLIKS RESUME] Native player ready (dur: $dur), executing exact seek: $startOffset');
-          await _player.seek(startOffset!);
+          debugPrint('🎬 [NITPLIKS RESUME] Native player ready (dur: $dur), executing exact seek: $resumeOffset');
+          await _player.seek(resumeOffset);
         });
 
         // Secondary fallback in case duration stream fired prior to subscription
         Future.delayed(const Duration(milliseconds: 600), () async {
-          if (mounted && (_player.state.position - startOffset!).inSeconds.abs() > 3) {
-            debugPrint('🎬 [NITPLIKS RESUME] Fallback delayed seek executing to $startOffset (current pos was ${_player.state.position})');
-            await _player.seek(startOffset);
+          if (mounted && (_player.state.position - resumeOffset).inSeconds.abs() > 3) {
+            debugPrint('🎬 [NITPLIKS RESUME] Fallback delayed seek executing to $resumeOffset (current pos was ${_player.state.position})');
+            await _player.seek(resumeOffset);
           }
         });
-
-        if (mounted) {
-          _resumeToastTimer?.cancel();
-          setState(() {
-            _position = startOffset!;
-            _resumedFromText = _formatDuration(startOffset);
-            _showResumeToast = true;
-          });
-          _resumeToastTimer = Timer(const Duration(milliseconds: 3200), () {
-            if (mounted) {
-              setState(() => _showResumeToast = false);
-            }
-          });
-        }
       } else {
         debugPrint('🎬 [NITPLIKS RESUME] Opening video from beginning...');
         await _player.open(Media(_currentVideo.path), play: true);
@@ -643,7 +633,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     final lastPos = _position.inMilliseconds;
     debugPrint('🎬 [NITPLIKS DISPOSE] Saving final position: $lastPos ms');
     _saveCurrentPosition(customPosMs: lastPos);
-    _resumeToastTimer?.cancel();
     _hideControlsTimer?.cancel();
     _hudDismissTimer?.cancel();
     _doubleTapAnimTimer?.cancel();
@@ -1121,9 +1110,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
                   // 7. Transparent Speed Side Drawer & Blocking Barrier (Terminates on outside tap)
                   _buildSpeedDrawerOverlay(palette),
-
-                  // 8. Subtle Non-Intrusive Resume Playback HUD Pill
-                  _buildResumeToastHUD(palette),
                 ],
               ),
             );
@@ -1215,77 +1201,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     );
   }
 
-  Widget _buildResumeToastHUD(AppPalette palette) {
-    return Positioned(
-      bottom: 95,
-      left: 0,
-      right: 0,
-      child: Center(
-        child: AnimatedOpacity(
-          opacity: _showResumeToast ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 300),
-          child: IgnorePointer(
-            ignoring: !_showResumeToast,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xDD111116),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: palette.primary.withValues(alpha: 0.5), width: 1.2),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.6),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(LucideIcons.history, color: palette.primary, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Resumed from $_resumedFromText',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  InkWell(
-                    borderRadius: BorderRadius.circular(12),
-                    onTap: () {
-                      _player.seek(Duration.zero);
-                      setState(() {
-                        _position = Duration.zero;
-                        _showResumeToast = false;
-                      });
-                      _saveCurrentPosition(reset: true);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      child: Text(
-                        'Start over',
-                        style: TextStyle(
-                          color: palette.primary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          decoration: TextDecoration.underline,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildDoubleTapIndicators() {
     return Stack(
