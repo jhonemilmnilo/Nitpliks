@@ -11,6 +11,7 @@ import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../../app/theme/app_palettes.dart';
 import '../../app/theme/palette_provider.dart';
+import '../../data/services/playback_database_service.dart';
 import '../../domain/models/media_models.dart';
 
 enum _GestureType { none, brightness, volume, seek }
@@ -29,7 +30,7 @@ class PlayerScreen extends ConsumerStatefulWidget {
   ConsumerState<PlayerScreen> createState() => _PlayerScreenState();
 }
 
-class _PlayerScreenState extends ConsumerState<PlayerScreen> {
+class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBindingObserver {
   late final Player _player;
   late final VideoController _controller;
   late int _currentIndex;
@@ -73,6 +74,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   bool _isSpeedDrawerOpen = false;
   bool _isLandscape = false;
 
+  // Resume Playback Persistence State
+  int _lastAutosaveMs = 0;
+  bool _showResumeToast = false;
+  String _resumedFromText = '';
+  Timer? _resumeToastTimer;
+
   static const String _prefRememberSpeedKey = 'nitpliks_remember_playback_speed';
   static const String _prefCachedSpeedKey = 'nitpliks_cached_playback_speed';
   static const String _prefEnhanceKey = 'nitpliks_video_enhance_enabled';
@@ -89,8 +96,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // 1. Keep display awake
     WakelockPlus.enable();
 
-    // 2. Hide Status & Navigation bars
+    // 2. Hide Status & Navigation bars & register lifecycle observer
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    WidgetsBinding.instance.addObserver(this);
 
     // 3. Initialize hardware-accelerated MediaKit player
     _player = Player(
@@ -116,7 +124,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     _positionSub = _player.stream.position.listen((pos) {
       if (mounted && !_isDraggingScrubber && _activeGesture != _GestureType.seek) {
-        setState(() => _position = pos);
+        // Prevent initial 0:00 emit from wiping UI before seeking to resume point
+        if (pos > Duration.zero || _position == Duration.zero) {
+          setState(() => _position = pos);
+        }
+      }
+      // Throttled Autosave every 2.5 seconds (Only save if pos > 3 seconds)
+      final now = DateTime.now().millisecondsSinceEpoch;
+      if (now - _lastAutosaveMs > 2500 && pos.inMilliseconds >= 3000) {
+        _lastAutosaveMs = now;
+        _saveCurrentPosition();
       }
     });
 
@@ -124,9 +141,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       if (mounted) setState(() => _duration = dur);
     });
 
-    // Auto-play next video in folder when finished
+    // Auto-play next video in folder when finished & clear saved position
     _completedSub = _player.stream.completed.listen((completed) {
       if (completed && mounted) {
+        _saveCurrentPosition(reset: true);
         if (_hasNext) {
           _playNext();
         }
@@ -222,16 +240,93 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _saveCurrentPosition();
+    }
+  }
+
+  Future<void> _saveCurrentPosition({bool reset = false, int? customPosMs}) async {
+    // If not reset, take the best available non-zero position
+    final playerPos = _player.state.position.inMilliseconds;
+    final statePos = _position.inMilliseconds;
+    final posMs = customPosMs ?? (playerPos > 0 ? playerPos : statePos);
+    final durMs = _duration.inMilliseconds > 0 ? _duration.inMilliseconds : _player.state.duration.inMilliseconds;
+
+    // Use our high-performance SQLite Watch History database
+    await PlaybackDatabaseService.instance.savePlaybackState(
+      video: _currentVideo,
+      positionMs: posMs,
+      durationMs: durMs,
+      reset: reset,
+    );
+  }
+
   Future<void> _openCurrentVideo() async {
     try {
-      await _player.open(Media(_currentVideo.path));
-      // Apply persisted or default playback speed
+      // 1. Fetch saved playback position from SQLite
+      final record = await PlaybackDatabaseService.instance.getPlaybackRecord(_currentVideo.path);
+      final savedPosMs = record?.lastPositionMs ?? 0;
+      final isCompleted = record?.isCompleted ?? false;
+      debugPrint('🎬 [NITPLIKS SQLITE LOAD] "${_currentVideo.title}" -> savedPosMs: $savedPosMs, completed: $isCompleted');
+
+      Duration? startOffset;
+      if (!isCompleted && savedPosMs > 3000) {
+        startOffset = Duration(milliseconds: savedPosMs);
+        debugPrint('🎬 [NITPLIKS SQLITE LOAD] Target resume startOffset: $startOffset');
+      }
+
+      // 2. Open media with start offset
+      if (startOffset != null && startOffset > Duration.zero) {
+        debugPrint('🎬 [NITPLIKS RESUME] Opening video with target startOffset: $startOffset');
+        
+        // Open media
+        await _player.open(Media(_currentVideo.path, start: startOffset), play: true);
+
+        // Reliable seek pipeline: Wait for duration > 0 (meaning native media is demuxed and decoder is active)
+        _player.stream.duration.firstWhere((dur) => dur > Duration.zero).then((dur) async {
+          debugPrint('🎬 [NITPLIKS RESUME] Native player ready (dur: $dur), executing exact seek: $startOffset');
+          await _player.seek(startOffset!);
+        });
+
+        // Secondary fallback in case duration stream fired prior to subscription
+        Future.delayed(const Duration(milliseconds: 600), () async {
+          if (mounted && (_player.state.position - startOffset!).inSeconds.abs() > 3) {
+            debugPrint('🎬 [NITPLIKS RESUME] Fallback delayed seek executing to $startOffset (current pos was ${_player.state.position})');
+            await _player.seek(startOffset);
+          }
+        });
+
+        if (mounted) {
+          _resumeToastTimer?.cancel();
+          setState(() {
+            _position = startOffset!;
+            _resumedFromText = _formatDuration(startOffset);
+            _showResumeToast = true;
+          });
+          _resumeToastTimer = Timer(const Duration(milliseconds: 3200), () {
+            if (mounted) {
+              setState(() => _showResumeToast = false);
+            }
+          });
+        }
+      } else {
+        debugPrint('🎬 [NITPLIKS RESUME] Opening video from beginning...');
+        await _player.open(Media(_currentVideo.path), play: true);
+      }
+
+      // 3. Apply persisted or default playback speed
       final targetRate = _rememberSpeed ? _playbackSpeed : 1.0;
       await _player.setRate(targetRate);
       if (mounted && !_rememberSpeed && _playbackSpeed != 1.0) {
         setState(() => _playbackSpeed = 1.0);
       }
-      // Apply persisted native video enhancement
+
+      // 4. Apply persisted native video enhancement
       if (_isEnhanced) {
         _applyNativeVideoEnhancement(true);
       }
@@ -240,8 +335,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     }
   }
 
+  void _togglePlayPause() {
+    _startHideControlsTimer();
+    if (_isPlaying) {
+      _player.pause();
+    } else {
+      _player.play();
+    }
+  }
+
   void _playPrevious() {
     if (!_hasPrevious) return;
+    _saveCurrentPosition();
     setState(() {
       _currentIndex--;
       _position = Duration.zero;
@@ -252,6 +357,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   void _playNext() {
     if (!_hasNext) return;
+    _saveCurrentPosition();
     setState(() {
       _currentIndex++;
       _position = Duration.zero;
@@ -272,8 +378,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       _position = targetPos;
     });
 
-    // Fast direct asynchronous seek to native mpv
+    // Fast direct asynchronous seek to native mpv & persist timestamp
     _player.seek(targetPos);
+    _saveCurrentPosition(customPosMs: targetMs);
   }
 
   void _startHideControlsTimer() {
@@ -409,6 +516,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final target = _position - const Duration(seconds: 10);
       final clamped = target < Duration.zero ? Duration.zero : target;
       _player.seek(clamped);
+      _saveCurrentPosition(customPosMs: clamped.inMilliseconds);
       setState(() {
         _position = clamped;
         _showDoubleTapLeft = true;
@@ -418,6 +526,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final target = _position + const Duration(seconds: 10);
       final clamped = target > _duration ? _duration : target;
       _player.seek(clamped);
+      _saveCurrentPosition(customPosMs: clamped.inMilliseconds);
       setState(() {
         _position = clamped;
         _showDoubleTapRight = true;
@@ -496,6 +605,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   void _onHorizontalDragEnd(DragEndDetails details) {
     if (_activeGesture == _GestureType.seek) {
       _player.seek(_seekTargetPosition);
+      _saveCurrentPosition(customPosMs: _seekTargetPosition.inMilliseconds);
       setState(() {
         _position = _seekTargetPosition;
       });
@@ -528,6 +638,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    // Persist latest position synchronously before destroying the native player
+    final lastPos = _position.inMilliseconds;
+    debugPrint('🎬 [NITPLIKS DISPOSE] Saving final position: $lastPos ms');
+    _saveCurrentPosition(customPosMs: lastPos);
+    _resumeToastTimer?.cancel();
     _hideControlsTimer?.cancel();
     _hudDismissTimer?.cancel();
     _doubleTapAnimTimer?.cancel();
@@ -562,6 +678,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
     return PopScope(
       canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          _saveCurrentPosition();
+        }
+      },
       child: Scaffold(
         backgroundColor: Colors.black,
         body: LayoutBuilder(
@@ -653,7 +774,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                       color: Colors.transparent,
                                       child: InkWell(
                                         borderRadius: BorderRadius.circular(20),
-                                        onTap: () => Navigator.pop(context),
+                                        onTap: () async {
+                                          await _saveCurrentPosition();
+                                          if (context.mounted) {
+                                            Navigator.pop(context);
+                                          }
+                                        },
                                         child: const Padding(
                                           padding: EdgeInsets.all(8.0),
                                           child: Icon(LucideIcons.arrowLeft, color: Colors.white, size: 22),
@@ -752,10 +878,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                   shape: const CircleBorder(),
                                   child: InkWell(
                                     customBorder: const CircleBorder(),
-                                    onTap: () {
-                                      _player.playOrPause();
-                                      _startHideControlsTimer();
-                                    },
+                                    onTap: _togglePlayPause,
                                     child: Padding(
                                       padding: const EdgeInsets.all(14),
                                       child: Icon(
@@ -858,6 +981,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                         onChangeEnd: (val) {
                                           final newPos = Duration(milliseconds: val.toInt());
                                           _player.seek(newPos);
+                                          _saveCurrentPosition(customPosMs: newPos.inMilliseconds);
                                           setState(() {
                                             _isDraggingScrubber = false;
                                             _position = newPos;
@@ -997,6 +1121,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
                   // 7. Transparent Speed Side Drawer & Blocking Barrier (Terminates on outside tap)
                   _buildSpeedDrawerOverlay(palette),
+
+                  // 8. Subtle Non-Intrusive Resume Playback HUD Pill
+                  _buildResumeToastHUD(palette),
                 ],
               ),
             );
@@ -1083,6 +1210,78 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               ),
             ],
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResumeToastHUD(AppPalette palette) {
+    return Positioned(
+      bottom: 95,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: AnimatedOpacity(
+          opacity: _showResumeToast ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 300),
+          child: IgnorePointer(
+            ignoring: !_showResumeToast,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xDD111116),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: palette.primary.withValues(alpha: 0.5), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(LucideIcons.history, color: palette.primary, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Resumed from $_resumedFromText',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      _player.seek(Duration.zero);
+                      setState(() {
+                        _position = Duration.zero;
+                        _showResumeToast = false;
+                      });
+                      _saveCurrentPosition(reset: true);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      child: Text(
+                        'Start over',
+                        style: TextStyle(
+                          color: palette.primary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
