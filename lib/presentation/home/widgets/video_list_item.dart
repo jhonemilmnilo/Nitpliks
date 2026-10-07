@@ -9,7 +9,7 @@ import 'package:video_player/domain/models/media_models.dart';
 import 'package:video_player/presentation/folder/widgets/video_action_bottom_sheet.dart';
 import 'package:video_player/presentation/home/providers/media_provider.dart';
 
-class VideoListItem extends ConsumerWidget {
+class VideoListItem extends ConsumerStatefulWidget {
   final VideoModel video;
   final String folderId;
   final VoidCallback onTap;
@@ -22,19 +22,53 @@ class VideoListItem extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<VideoListItem> createState() => _VideoListItemState();
+}
+
+class _VideoListItemState extends ConsumerState<VideoListItem> {
+  Future<String?>? _thumbnailFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initThumbnail();
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.video.path != widget.video.path) {
+      _initThumbnail();
+    }
+  }
+
+  void _initThumbnail() {
+    // If not already in synchronous memory cache, schedule future once
+    if (VideoThumbnailService.getCachedThumbnailPath(widget.video.path) == null) {
+      _thumbnailFuture = VideoThumbnailService.getThumbnailPath(
+        videoPath: widget.video.path,
+        duration: widget.video.duration,
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final palette = ref.watch(paletteProvider);
     final updatingVideoId = ref.watch(updatingVideoIdProvider);
-    final isUpdating = updatingVideoId == video.id;
+    final isUpdating = updatingVideoId == widget.video.id;
 
     if (isUpdating) {
       return _VideoListItemSkeleton(palette: palette);
     }
 
+    // Fast synchronous cache check
+    final cachedThumbPath = VideoThumbnailService.getCachedThumbnailPath(widget.video.path);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: onTap,
+        onTap: widget.onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
           margin: const EdgeInsets.only(bottom: 6),
@@ -56,39 +90,43 @@ class VideoListItem extends ConsumerWidget {
                     fit: StackFit.expand,
                     children: [
                       // High quality 1-minute frame thumbnail
-                      FutureBuilder<String?>(
-                        future: VideoThumbnailService.getThumbnailPath(
-                          videoPath: video.path,
-                          duration: video.duration,
-                        ),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState == ConnectionState.done &&
-                              snapshot.data != null &&
-                              snapshot.data!.isNotEmpty) {
-                            return Image.file(
-                              File(snapshot.data!),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => _buildAssetOrFallback(palette),
-                            );
-                          }
+                      if (cachedThumbPath != null)
+                        Image.file(
+                          File(cachedThumbPath),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => _buildAssetOrFallback(palette),
+                        )
+                      else
+                        FutureBuilder<String?>(
+                          future: _thumbnailFuture,
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState == ConnectionState.done &&
+                                snapshot.data != null &&
+                                snapshot.data!.isNotEmpty) {
+                              return Image.file(
+                                File(snapshot.data!),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => _buildAssetOrFallback(palette),
+                              );
+                            }
 
-                          if (snapshot.connectionState == ConnectionState.done && snapshot.data == null) {
-                            return _buildAssetOrFallback(palette);
-                          }
+                            if (snapshot.connectionState == ConnectionState.done && snapshot.data == null) {
+                              return _buildAssetOrFallback(palette);
+                            }
 
-                          // Subtle pulsing placeholder while loading 1-minute frame
-                          return Center(
-                            child: SizedBox(
-                              width: 14,
-                              height: 14,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: palette.primary.withValues(alpha: 0.5),
+                            // Subtle pulsing placeholder while initial loading
+                            return Center(
+                              child: SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: palette.primary.withValues(alpha: 0.5),
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
 
                       // Duration Badge (bottom right)
                       Positioned(
@@ -101,7 +139,7 @@ class VideoListItem extends ConsumerWidget {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            video.formattedDuration,
+                            widget.video.formattedDuration,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 9.5,
@@ -124,7 +162,7 @@ class VideoListItem extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Text(
-                      video.title,
+                      widget.video.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -138,7 +176,7 @@ class VideoListItem extends ConsumerWidget {
                     Row(
                       children: [
                         Text(
-                          video.formattedSize,
+                          widget.video.formattedSize,
                           style: TextStyle(
                             color: palette.textMuted,
                             fontSize: 11,
@@ -156,7 +194,7 @@ class VideoListItem extends ConsumerWidget {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          _formatDate(video.modifiedDate),
+                          _formatDate(widget.video.modifiedDate),
                           style: TextStyle(
                             color: palette.textMuted,
                             fontSize: 10.5,
@@ -174,15 +212,15 @@ class VideoListItem extends ConsumerWidget {
                 child: InkWell(
                   borderRadius: BorderRadius.circular(20),
                   onTap: () async {
-                    final action = await VideoActionBottomSheet.show(context, video, folderId);
+                    final action = await VideoActionBottomSheet.show(context, widget.video, widget.folderId);
                     if (!context.mounted || action == null) return;
 
                     switch (action) {
                       case VideoMenuAction.rename:
-                        VideoActionBottomSheet.showRenameDialog(context, ref, video, folderId);
+                        VideoActionBottomSheet.showRenameDialog(context, ref, widget.video, widget.folderId);
                         break;
                       case VideoMenuAction.delete:
-                        VideoActionBottomSheet.showDeleteDialog(context, ref, video, folderId);
+                        VideoActionBottomSheet.showDeleteDialog(context, ref, widget.video, widget.folderId);
                         break;
                     }
                   },
@@ -204,9 +242,9 @@ class VideoListItem extends ConsumerWidget {
   }
 
   Widget _buildAssetOrFallback(dynamic palette) {
-    if (video.asset != null) {
+    if (widget.video.asset != null) {
       return FutureBuilder(
-        future: video.asset!.thumbnailDataWithSize(
+        future: widget.video.asset!.thumbnailDataWithSize(
           const ThumbnailSize(240, 150),
           quality: 80,
         ),

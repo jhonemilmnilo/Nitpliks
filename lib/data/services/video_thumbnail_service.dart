@@ -12,6 +12,17 @@ class VideoThumbnailService {
   /// In-memory cache for fast UI access
   static final Map<String, String> _memoryCache = {};
 
+  /// Fast synchronous lookup from memory cache
+  static String? getCachedThumbnailPath(String videoPath) {
+    if (_memoryCache.containsKey(videoPath)) {
+      final cached = _memoryCache[videoPath]!;
+      if (File(cached).existsSync()) {
+        return cached;
+      }
+    }
+    return null;
+  }
+
   static Future<String> _getCacheDirectory() async {
     if (_cacheDirPath != null) return _cacheDirPath!;
     final tempDir = await getTemporaryDirectory();
