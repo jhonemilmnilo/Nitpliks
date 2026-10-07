@@ -68,12 +68,18 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   BoxFit _aspectRatio = BoxFit.contain;
   double _playbackSpeed = 1.0;
   bool _rememberSpeed = true;
+  bool _isEnhanced = false;
   bool _isScreenLocked = false;
   bool _isSpeedDrawerOpen = false;
   bool _isLandscape = false;
 
+  // Enhance feedback toast
+  bool _showEnhanceToast = false;
+  Timer? _enhanceToastTimer;
+
   static const String _prefRememberSpeedKey = 'nitpliks_remember_playback_speed';
   static const String _prefCachedSpeedKey = 'nitpliks_cached_playback_speed';
+  static const String _prefEnhanceKey = 'nitpliks_video_enhance_enabled';
 
   VideoModel get _currentVideo => widget.videos[_currentIndex];
   bool get _hasPrevious => _currentIndex > 0;
@@ -141,15 +147,17 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       final prefs = await SharedPreferences.getInstance();
       final remember = prefs.getBool(_prefRememberSpeedKey) ?? true;
       final cachedRate = prefs.getDouble(_prefCachedSpeedKey) ?? 1.0;
+      final enhanced = prefs.getBool(_prefEnhanceKey) ?? false;
 
       if (mounted) {
         setState(() {
           _rememberSpeed = remember;
           _playbackSpeed = remember ? cachedRate : 1.0;
+          _isEnhanced = enhanced;
         });
       }
     } catch (e) {
-      debugPrint('Error loading speed preferences: $e');
+      debugPrint('Error loading preferences: $e');
     }
 
     await _openCurrentVideo();
@@ -164,6 +172,50 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       }
     } catch (e) {
       debugPrint('Error saving speed preferences: $e');
+    }
+  }
+
+  void _toggleVideoEnhance() {
+    _startHideControlsTimer();
+    final newEnhance = !_isEnhanced;
+    setState(() {
+      _isEnhanced = newEnhance;
+      _showEnhanceToast = true;
+    });
+
+    _applyNativeVideoEnhancement(newEnhance);
+
+    _enhanceToastTimer?.cancel();
+    _enhanceToastTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) {
+        setState(() => _showEnhanceToast = false);
+      }
+    });
+
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setBool(_prefEnhanceKey, newEnhance);
+    });
+  }
+
+  Future<void> _applyNativeVideoEnhancement(bool enable) async {
+    try {
+      final nativePlayer = _player.platform as dynamic;
+      if (enable) {
+        // 1. Hardware Contrast & Color Vibrance/Saturation
+        await nativePlayer?.setProperty('contrast', '15');
+        await nativePlayer?.setProperty('saturation', '20');
+        await nativePlayer?.setProperty('gamma', '3');
+        // 2. Hardware Unsharp Mask filter for real edge sharpening & clarity
+        await nativePlayer?.setProperty('vf', 'unsharp=5:0.8:5:0.8');
+      } else {
+        // Reset to raw default values
+        await nativePlayer?.setProperty('contrast', '0');
+        await nativePlayer?.setProperty('saturation', '0');
+        await nativePlayer?.setProperty('gamma', '0');
+        await nativePlayer?.setProperty('vf', '');
+      }
+    } catch (e) {
+      debugPrint('Error applying native video enhancement: $e');
     }
   }
 
@@ -190,6 +242,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
       await _player.setRate(targetRate);
       if (mounted && !_rememberSpeed && _playbackSpeed != 1.0) {
         setState(() => _playbackSpeed = 1.0);
+      }
+      // Apply persisted native video enhancement
+      if (_isEnhanced) {
+        _applyNativeVideoEnhancement(true);
       }
     } catch (e) {
       debugPrint('Error opening video ${_currentVideo.path}: $e');
@@ -487,6 +543,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _hideControlsTimer?.cancel();
     _hudDismissTimer?.cancel();
     _doubleTapAnimTimer?.cancel();
+    _enhanceToastTimer?.cancel();
     _playingSub.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
@@ -535,7 +592,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 1. Hardware Video Canvas with Dynamic Aspect Ratio Fit
+                  // 1. Hardware Video Canvas with Dynamic Aspect Ratio Fit (Enhanced via native libmpv engine)
                   Center(
                     child: Video(
                       controller: _controller,
@@ -895,7 +952,31 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                                           ),
                                           const SizedBox(width: 12),
 
-                                          // 3. Playback Speed Icon Button (Opens Transparent Right Drawer)
+                                          // 3. Visual Clarity / AI Enhance Button
+                                          Material(
+                                            color: _isEnhanced
+                                                ? palette.primary.withValues(alpha: 0.35)
+                                                : Colors.white.withValues(alpha: 0.1),
+                                            borderRadius: BorderRadius.circular(10),
+                                            child: Tooltip(
+                                              message: _isEnhanced ? 'Visual Enhance (Vivid HDR): ON' : 'Visual Enhance: OFF',
+                                              child: InkWell(
+                                                borderRadius: BorderRadius.circular(10),
+                                                onTap: _toggleVideoEnhance,
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(9.0),
+                                                  child: Icon(
+                                                    LucideIcons.sparkles,
+                                                    color: _isEnhanced ? palette.primary : Colors.white,
+                                                    size: 18,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+
+                                          // 4. Playback Speed Icon Button (Opens Transparent Right Drawer)
                                           Material(
                                             color: _isSpeedDrawerOpen
                                                 ? palette.primary.withValues(alpha: 0.35)
@@ -939,6 +1020,42 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   Widget _buildFloatingHudOverlay(AppPalette palette) {
+    if (_showEnhanceToast) {
+      return Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: _isEnhanced ? palette.primary.withValues(alpha: 0.6) : Colors.white12,
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                LucideIcons.sparkles,
+                color: _isEnhanced ? palette.primary : Colors.white60,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _isEnhanced ? 'Visual Enhance: ON (Vivid HDR)' : 'Visual Enhance: OFF (Original)',
+                style: TextStyle(
+                  color: _isEnhanced ? palette.primary : Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (_activeGesture == _GestureType.none) {
       return const SizedBox.shrink();
     }
