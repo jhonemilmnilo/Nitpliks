@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:video_player/app/theme/app_theme.dart';
+import 'package:video_player/app/theme/palette_provider.dart';
 import 'package:video_player/domain/models/media_models.dart';
 
-class FolderCard extends StatelessWidget {
+class FolderCard extends ConsumerWidget {
   final DeviceFolderModel folder;
   final VoidCallback onTap;
 
@@ -14,7 +16,9 @@ class FolderCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = ref.watch(paletteProvider);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -23,9 +27,9 @@ class FolderCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: palette.surface,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: palette.border),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.25),
@@ -36,26 +40,26 @@ class FolderCard extends StatelessWidget {
           ),
           child: Row(
             children: [
-              // Folder icon with neon glass accent
+              // Folder icon with dynamic palette glow
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.primary.withValues(alpha: 0.12),
+                  color: palette.primary.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: AppTheme.primary.withValues(alpha: 0.3),
+                    color: palette.primary.withValues(alpha: 0.3),
                     width: 1,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   LucideIcons.folder,
-                  color: AppTheme.primaryLight,
+                  color: palette.primaryLight,
                   size: 24,
                 ),
               ),
               const SizedBox(width: 14),
 
-              // Folder Name & Video Count
+              // Folder Name & Video Count & Date
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
