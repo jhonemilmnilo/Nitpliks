@@ -165,6 +165,12 @@ class FolderActionBottomSheet extends ConsumerWidget {
           ),
         );
       }
+    } else if (result == RenameResult.permissionDenied) {
+      setIsSubmitting(false);
+      Navigator.pop(dialogCtx);
+      if (parentContext.mounted) {
+        _showStoragePermissionDialog(parentContext, ref);
+      }
     } else {
       String msg;
       switch (result) {
@@ -173,9 +179,6 @@ class FolderActionBottomSheet extends ConsumerWidget {
           break;
         case RenameResult.alreadyExists:
           msg = 'A folder with that name already exists';
-          break;
-        case RenameResult.permissionDenied:
-          msg = 'Permission denied by Android Scoped Storage';
           break;
         case RenameResult.emptyFolder:
           msg = 'Folder is empty or not found';
@@ -186,6 +189,54 @@ class FolderActionBottomSheet extends ConsumerWidget {
       setIsSubmitting(false);
       setErrorMessage(msg);
     }
+  }
+
+  void _showStoragePermissionDialog(BuildContext context, WidgetRef ref) {
+    final palette = ref.read(paletteProvider);
+
+    showDialog(
+      context: context,
+      builder: (pCtx) => AlertDialog(
+        backgroundColor: palette.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(LucideIcons.shieldAlert, color: palette.primary, size: 22),
+            const SizedBox(width: 10),
+            Text(
+              'Permission Required',
+              style: TextStyle(
+                color: palette.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Android Scoped Storage requires "All Files Access" to rename folders directly on your device storage.\n\nWould you like to grant this permission in System Settings?',
+          style: TextStyle(color: palette.textSecondary, fontSize: 14, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(pCtx),
+            child: Text('Cancel', style: TextStyle(color: palette.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: palette.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () async {
+              Navigator.pop(pCtx);
+              await DeviceMediaService.requestManageStoragePermission();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showDeleteDialog(BuildContext context, WidgetRef ref) {

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:photo_manager/photo_manager.dart';
 import '../../domain/models/media_models.dart';
 
@@ -31,6 +32,24 @@ class DeviceMediaService {
       ),
     );
     return state.isAuth || state.hasAccess;
+  }
+
+  /// Check if user has granted full storage management (MANAGE_EXTERNAL_STORAGE)
+  static Future<bool> hasManageStoragePermission() async {
+    if (!Platform.isAndroid) return true;
+    final status = await Permission.manageExternalStorage.status;
+    return status.isGranted;
+  }
+
+  /// Request All Files Access (MANAGE_EXTERNAL_STORAGE)
+  static Future<bool> requestManageStoragePermission() async {
+    if (!Platform.isAndroid) return true;
+    final status = await Permission.manageExternalStorage.request();
+    if (status.isPermanentlyDenied) {
+      await openAppSettings();
+      return false;
+    }
+    return status.isGranted;
   }
 
   /// Fast scan: fetches only folder headers and counts without touching video files
