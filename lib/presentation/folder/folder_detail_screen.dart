@@ -5,6 +5,7 @@ import '../../app/theme/palette_provider.dart';
 import '../../domain/models/media_models.dart';
 import '../home/providers/media_provider.dart';
 import '../home/widgets/video_list_item.dart';
+import '../player/player_screen.dart';
 import 'providers/video_sort_provider.dart';
 import 'widgets/video_sort_bottom_sheet.dart';
 
@@ -286,10 +287,13 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                               video: video,
                               folderId: widget.folder.id,
                               onTap: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Playing "${video.title}"'),
-                                    behavior: SnackBarBehavior.floating,
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => PlayerScreen(
+                                      videos: filteredVideos,
+                                      initialIndex: index,
+                                    ),
                                   ),
                                 );
                               },
