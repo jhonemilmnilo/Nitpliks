@@ -163,7 +163,9 @@ class FolderActionBottomSheet extends ConsumerWidget {
     if (!dialogCtx.mounted) return;
 
     if (result == RenameResult.success) {
+      // Invalidate and re-fetch folders so UI immediately reflects the new name
       ref.invalidate(deviceFoldersProvider);
+      
       Navigator.pop(dialogCtx);
       if (parentContext.mounted) {
         ScaffoldMessenger.of(parentContext).showSnackBar(
