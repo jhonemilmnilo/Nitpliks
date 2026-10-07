@@ -1,9 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:video_player/data/services/device_media_service.dart';
+import 'package:video_player/domain/models/media_models.dart';
 
-/// State notifier provider for device media scanning
-final mediaLoadingProvider = StateProvider<bool>((ref) => false);
+/// Provider for fast folder scanning on home screen
+final deviceFoldersProvider = FutureProvider<DeviceMediaResult>((ref) async {
+  return await DeviceMediaService.fetchFolders();
+});
 
-final deviceMediaProvider = FutureProvider<DeviceMediaResult>((ref) async {
-  return await DeviceMediaService.fetchDeviceMedia();
+/// Family provider for loading videos on-demand for a clicked folder
+final folderVideosProvider = FutureProvider.family<List<VideoModel>, String>((ref, folderId) async {
+  return await DeviceMediaService.fetchVideosInFolder(folderId);
 });

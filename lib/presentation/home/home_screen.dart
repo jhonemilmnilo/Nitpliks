@@ -5,9 +5,9 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:video_player/app/theme/app_theme.dart';
 import 'package:video_player/data/services/device_media_service.dart';
 import 'package:video_player/domain/models/media_models.dart';
+import 'package:video_player/presentation/folder/folder_detail_screen.dart';
 import 'providers/media_provider.dart';
 import 'widgets/folder_card.dart';
-import 'widgets/video_list_item.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -29,7 +29,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mediaAsync = ref.watch(deviceMediaProvider);
+    final foldersAsync = ref.watch(deviceFoldersProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.background,
@@ -40,7 +40,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 autofocus: true,
                 style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16),
                 decoration: const InputDecoration(
-                  hintText: 'Search videos, folders...',
+                  hintText: 'Search folders...',
                   hintStyle: TextStyle(color: AppTheme.textMuted),
                   border: InputBorder.none,
                 ),
@@ -78,8 +78,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           IconButton(
             icon: const Icon(LucideIcons.rotateCw, color: AppTheme.textSecondary, size: 20),
+            tooltip: 'Rescan Folders',
             onPressed: () {
-              ref.invalidate(deviceMediaProvider);
+              ref.invalidate(deviceFoldersProvider);
             },
           ),
           IconButton(
@@ -97,9 +98,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         color: AppTheme.accent,
         backgroundColor: AppTheme.surface,
         onRefresh: () async {
-          return ref.refresh(deviceMediaProvider);
+          return ref.refresh(deviceFoldersProvider);
         },
-        child: mediaAsync.when(
+        child: foldersAsync.when(
           loading: () => const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -107,7 +108,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 CircularProgressIndicator(color: AppTheme.accent),
                 SizedBox(height: 16),
                 Text(
-                  'Scanning your device for videos...',
+                  'Scanning video folders...',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
                 ),
               ],
@@ -122,13 +123,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const Icon(LucideIcons.alertCircle, size: 48, color: Colors.redAccent),
                   const SizedBox(height: 16),
                   Text(
-                    'Failed to scan videos: $err',
+                    'Failed to scan folders: $err',
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: AppTheme.textSecondary),
                   ),
                   const SizedBox(height: 16),
                   ElevatedButton(
-                    onPressed: () => ref.invalidate(deviceMediaProvider),
+                    onPressed: () => ref.invalidate(deviceFoldersProvider),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primary,
                       foregroundColor: Colors.white,
@@ -159,7 +160,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'NitPliks needs permission to access your device videos so you can browse and play your clips.',
+                        'NitPliks needs permission to browse video folders on your device.',
                         textAlign: TextAlign.center,
                         style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
                       ),
@@ -178,7 +179,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         onPressed: () async {
                           final granted = await DeviceMediaService.requestPermission();
                           if (granted) {
-                            ref.invalidate(deviceMediaProvider);
+                            ref.invalidate(deviceFoldersProvider);
                           } else {
                             await PhotoManager.openSetting();
                           }
@@ -190,25 +191,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               );
             }
 
-            final filteredFolders = result.folders.where((FolderModel f) {
+            final filteredFolders = result.folders.where((DeviceFolderModel f) {
               return f.name.toLowerCase().contains(_searchQuery.toLowerCase());
             }).toList();
 
-            final filteredLooseVideos = result.looseVideos.where((VideoModel v) {
-              return v.title.toLowerCase().contains(_searchQuery.toLowerCase());
-            }).toList();
-
-            if (filteredFolders.isEmpty && filteredLooseVideos.isEmpty) {
+            if (filteredFolders.isEmpty) {
               return Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(LucideIcons.film, size: 52, color: AppTheme.textMuted),
+                    const Icon(LucideIcons.folderX, size: 52, color: AppTheme.textMuted),
                     const SizedBox(height: 16),
                     Text(
                       _searchQuery.isNotEmpty
-                          ? 'No results found for "$_searchQuery"'
-                          : 'No videos found on this device',
+                          ? 'No folders found for "$_searchQuery"'
+                          : 'No video folders found on this device',
                       style: const TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 16,
@@ -225,105 +222,73 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               );
             }
 
-            return ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              children: [
-                // ──────────────────────────────────────────────
-                // SECTION: FOLDERS & ALBUMS (FIRST PRIORITY)
-                // ──────────────────────────────────────────────
-                if (filteredFolders.isNotEmpty) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Folders (${filteredFolders.length})',
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+            // Virtualized CustomScrollView with pure Slivers for 120Hz smooth scrolling
+            return CustomScrollView(
+              physics: const AlwaysScrollableScrollPhysics(
+                parent: BouncingScrollPhysics(),
+              ),
+              slivers: [
+                // Header Count indicator
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Folders (${filteredFolders.length})',
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const Text(
-                        'Folders First',
-                        style: TextStyle(
-                          color: AppTheme.textMuted,
-                          fontSize: 11,
-                          letterSpacing: 0.2,
+                        const Text(
+                          'Folders First',
+                          style: TextStyle(
+                            color: AppTheme.textMuted,
+                            fontSize: 11,
+                            letterSpacing: 0.2,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredFolders.length,
+                ),
+
+                // Virtualized folder grid
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  sliver: SliverGrid(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       mainAxisSpacing: 10,
                       crossAxisSpacing: 10,
                       childAspectRatio: 2.1,
                     ),
-                    itemBuilder: (context, index) {
-                      final folder = filteredFolders[index];
-                      return FolderCard(
-                        folder: folder,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Opening ${folder.name} (${folder.videoCount} videos)'),
-                            ),
-                          );
-                        },
-                      );
-                    },
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final folder = filteredFolders[index];
+                        return FolderCard(
+                          folder: folder,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FolderDetailScreen(folder: folder),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      childCount: filteredFolders.length,
+                    ),
                   ),
-                  const SizedBox(height: 28),
-                ],
+                ),
 
-                // ──────────────────────────────────────────────
-                // SECTION: ALL VIDEOS (STANDALONE)
-                // ──────────────────────────────────────────────
-                if (filteredLooseVideos.isNotEmpty) ...[
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'All Videos (${filteredLooseVideos.length})',
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const Text(
-                        'Device Storage',
-                        style: TextStyle(
-                          color: AppTheme.textMuted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ListView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: filteredLooseVideos.length,
-                    itemBuilder: (context, index) {
-                      final video = filteredLooseVideos[index];
-                      return VideoListItem(
-                        video: video,
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Playing "${video.title}"')),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 40),
-                ],
+                const SliverToBoxAdapter(
+                  child: SizedBox(height: 32),
+                ),
               ],
             );
           },

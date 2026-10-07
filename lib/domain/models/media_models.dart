@@ -1,4 +1,17 @@
-/// Domain Entity: Video Item
+/// Domain Entity: Lightweight Folder representation for fast scrolling
+class DeviceFolderModel {
+  final String id;
+  final String name;
+  final int videoCount;
+
+  const DeviceFolderModel({
+    required this.id,
+    required this.name,
+    required this.videoCount,
+  });
+}
+
+/// Domain Entity: Video Item loaded on-demand
 class VideoModel {
   final String id;
   final String title;
@@ -41,7 +54,7 @@ class VideoModel {
   }
 }
 
-/// Domain Entity: Folder containing multiple videos
+/// Legacy/Convenience Folder Model with videos list
 class FolderModel {
   final String name;
   final String path;
