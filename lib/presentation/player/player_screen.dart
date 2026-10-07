@@ -36,14 +36,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
 
   // Stream Subscriptions
   late final StreamSubscription<bool> _playingSub;
-  late final StreamSubscription<bool> _bufferingSub;
   late final StreamSubscription<Duration> _positionSub;
   late final StreamSubscription<Duration> _durationSub;
   late final StreamSubscription<bool> _completedSub;
 
   // Playback States
   bool _isPlaying = true;
-  bool _isBuffering = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
 
@@ -112,10 +110,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     // 5. Listen to real-time playback streams
     _playingSub = _player.stream.playing.listen((playing) {
       if (mounted) setState(() => _isPlaying = playing);
-    });
-
-    _bufferingSub = _player.stream.buffering.listen((buffering) {
-      if (mounted) setState(() => _isBuffering = buffering);
     });
 
     _positionSub = _player.stream.position.listen((pos) {
@@ -228,10 +222,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final maxMs = _duration.inMilliseconds;
     final targetMs = (currentMs + (seconds * 1000)).clamp(0, maxMs);
     final targetPos = Duration(milliseconds: targetMs);
-    _player.seek(targetPos);
+
+    // Optimistic UI update for instant zero-lag response
     setState(() {
       _position = targetPos;
     });
+
+    // Fast direct asynchronous seek to native mpv
+    _player.seek(targetPos);
   }
 
   void _startHideControlsTimer() {
@@ -490,7 +488,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     _hudDismissTimer?.cancel();
     _doubleTapAnimTimer?.cancel();
     _playingSub.cancel();
-    _bufferingSub.cancel();
     _positionSub.cancel();
     _durationSub.cancel();
     _completedSub.cancel();
@@ -547,23 +544,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
                     ),
                   ),
 
-                  // 2. Buffering Spinner
-                  if (_isBuffering)
-                    Center(
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.black45,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: CircularProgressIndicator(
-                          color: palette.primary,
-                          strokeWidth: 3,
-                        ),
-                      ),
-                    ),
-
-                  // 3. Floating HUD Overlays (Volume, Brightness, Seek)
+                  // 2. Floating HUD Overlays (Volume, Brightness, Seek)
                   _buildFloatingHudOverlay(palette),
 
                   // 4. Double Tap Feedback Indicators
