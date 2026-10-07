@@ -154,6 +154,7 @@ class DeviceMediaService {
             sizeInBytes: file != null ? await file.length() : 0,
             parentFolder: album.name,
             modifiedDate: asset.createDateTime,
+            asset: asset,
           ),
         );
       }

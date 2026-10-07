@@ -1,3 +1,5 @@
+import 'package:photo_manager/photo_manager.dart';
+
 /// Domain Entity: Lightweight Folder representation for fast scrolling
 class DeviceFolderModel {
   final String id;
@@ -41,6 +43,7 @@ class VideoModel {
   final String parentFolder;
   final DateTime modifiedDate;
   final String? thumbnailPath;
+  final AssetEntity? asset;
 
   const VideoModel({
     required this.id,
@@ -51,6 +54,7 @@ class VideoModel {
     required this.parentFolder,
     required this.modifiedDate,
     this.thumbnailPath,
+    this.asset,
   });
 
   /// Formatted duration string: HH:mm:ss or mm:ss
