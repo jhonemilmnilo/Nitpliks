@@ -79,10 +79,22 @@ class DeviceMediaService {
 
         final int count = await album.assetCountAsync;
         if (count > 0) {
+          // Resolve accurate physical folder name from first file path if available
+          String displayName = album.name;
+          try {
+            final sample = await album.getAssetListRange(start: 0, end: 1);
+            if (sample.isNotEmpty) {
+              final f = await sample.first.file;
+              if (f != null) {
+                displayName = f.parent.path.split(Platform.pathSeparator).last;
+              }
+            }
+          } catch (_) {}
+
           folderList.add(
             DeviceFolderModel(
               id: album.id,
-              name: album.name,
+              name: displayName,
               videoCount: count,
               lastModified: album.lastModified,
             ),
@@ -224,27 +236,40 @@ class DeviceMediaService {
       final parentDir = currentDir.parent;
       final newDirPath = '${parentDir.path}${Platform.pathSeparator}$trimmed';
 
+      debugPrint('🎬 [NitPliks Rename] Current Dir: ${currentDir.path}');
+      debugPrint('🎬 [NitPliks Rename] Target Dir: $newDirPath');
+
       if (currentDir.path.toLowerCase() == newDirPath.toLowerCase()) {
+        debugPrint('🎬 [NitPliks Rename] Same name detected');
         return RenameResult.sameName;
       }
 
       final newDir = Directory(newDirPath);
       if (await newDir.exists()) {
+        debugPrint('🎬 [NitPliks Rename] Target dir already exists');
         return RenameResult.alreadyExists;
       }
 
+      // Check manage storage permission first on Android
+      final hasManage = await hasManageStoragePermission();
+      debugPrint('🎬 [NitPliks Rename] Has MANAGE_EXTERNAL_STORAGE permission: $hasManage');
+      if (!hasManage) {
+        return RenameResult.permissionDenied;
+      }
+
       // Perform directory rename on file system
-      await currentDir.rename(newDirPath);
+      final renamedDir = await currentDir.rename(newDirPath);
+      debugPrint('🎬 [NitPliks Rename] Successfully renamed directory to: ${renamedDir.path}');
 
       // Invalidate PhotoManager cache so media scanner picks up the changes
       await PhotoManager.clearFileCache();
       
       return RenameResult.success;
     } on FileSystemException catch (e) {
-      debugPrint('FileSystemException renaming folder: $e');
+      debugPrint('🎬 [NitPliks Rename] FileSystemException: $e');
       return RenameResult.permissionDenied;
     } catch (e, stack) {
-      debugPrint('Error renaming folder: $e\n$stack');
+      debugPrint('🎬 [NitPliks Rename] Unknown Exception: $e\n$stack');
       return RenameResult.unknownError;
     }
   }
