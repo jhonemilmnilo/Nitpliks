@@ -267,59 +267,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                       ),
                     ),
 
-                  // 3. Swipe-to-Seek Interactive Center HUD
+                  // 3. Swipe-to-Seek Floating Minimalist HUD (Text & Icons only)
                   if (_isSwipingToSeek)
                     Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.8),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white24, width: 1.2),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.6),
-                              blurRadius: 20,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  _swipeSeekTargetMs >= _swipeStartPosMs
-                                      ? LucideIcons.fastForward
-                                      : LucideIcons.rewind,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _swipeSeekTargetMs >= _swipeStartPosMs
+                                    ? LucideIcons.fastForward
+                                    : LucideIcons.rewind,
+                                color: palette.primary,
+                                size: 36,
+                                shadows: const [
+                                  Shadow(color: Colors.black87, blurRadius: 10),
+                                ],
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${_swipeSeekTargetMs >= _swipeStartPosMs ? "+" : ""}${((_swipeSeekTargetMs - _swipeStartPosMs) / 1000).toInt()}s',
+                                style: TextStyle(
                                   color: palette.primary,
-                                  size: 28,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                  shadows: const [
+                                    Shadow(color: Colors.black87, blurRadius: 10),
+                                  ],
                                 ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  '${_swipeSeekTargetMs >= _swipeStartPosMs ? "+" : ""}${((_swipeSeekTargetMs - _swipeStartPosMs) / 1000).toInt()}s',
-                                  style: TextStyle(
-                                    color: palette.primary,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            '${_formatDuration(Duration(milliseconds: _swipeSeekTargetMs))} / ${_formatDuration(duration)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                              shadows: [
+                                Shadow(color: Colors.black87, blurRadius: 10),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Text(
-                              '${_formatDuration(Duration(milliseconds: _swipeSeekTargetMs))} / ${_formatDuration(duration)}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
 

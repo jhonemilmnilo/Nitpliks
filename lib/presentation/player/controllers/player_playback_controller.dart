@@ -213,37 +213,41 @@ class PlayerPlaybackController extends ChangeNotifier {
           debugPrint('⚠️ [PLAYBACK NATIVE MPV PROPERTY ERROR] $e');
         }
 
-        // Open media
+        // Open media initially paused to prevent race condition with hardware decoder
         await player.open(
           Media(
             currentVideo.path,
             start: startOffset,
           ),
-          play: true,
+          play: false,
         );
 
-        // Wait until decoder is actively running (position stream emits its first tick)
+        // Wait until duration/metadata is loaded so mpv knows the total timeline
         try {
-          await player.stream.position
-              .firstWhere((p) => p > Duration.zero)
-              .timeout(const Duration(milliseconds: 2000));
+          await player.stream.duration
+              .firstWhere((d) => d > Duration.zero)
+              .timeout(const Duration(milliseconds: 2500));
         } catch (_) {}
 
-        // Small breather for MediaCodec buffers to be hot
-        await Future.delayed(const Duration(milliseconds: 150));
+        // Small breather for MediaCodec buffers to be initialized
+        await Future.delayed(const Duration(milliseconds: 100));
 
-        // Now that the native engine is 100% active, execute seek!
-        debugPrint('🎬 [PLAYBACK ENFORCE SEEK] Native decoder is hot, executing seek to: $startOffset');
+        // Execute precise seek to resume position
+        debugPrint('🎬 [PLAYBACK ENFORCE SEEK] Executing seek to: $startOffset');
         await player.seek(startOffset);
 
-        // Wait for player position to jump to the resume point
-        try {
-          await player.stream.position
-              .firstWhere((pos) => pos.inMilliseconds >= (targetResumeMs - 5000))
-              .timeout(const Duration(milliseconds: 3000));
-          debugPrint('🎯 [PLAYBACK SYNC SUCCESS] Native player confirmed at target resume position!');
-        } catch (_) {
-          debugPrint('⚠️ [PLAYBACK SYNC TIMEOUT] Position stream seek verification timed out.');
+        // Small pause to let native seek settle before starting playback
+        // Unpause playback
+        await player.play();
+        debugPrint('🎯 [PLAYBACK SYNC] Play command dispatched, verifying playback keyframe position...');
+
+        // Verify if position is actually near resume target; if Android MediaCodec snapped back to 0, enforce active seek!
+        await Future.delayed(const Duration(milliseconds: 200));
+        final actualPos = player.state.position.inMilliseconds;
+        debugPrint('🎬 [PLAYBACK AUDIT] Native position after play: $actualPos ms (Target: $targetResumeMs ms)');
+        if (actualPos < (targetResumeMs - 4000)) {
+          debugPrint('🚨 [PLAYBACK SNAPBACK DETECTED] Enforcing active live seek to: $startOffset');
+          await player.seek(startOffset);
         }
       } else {
         // Reset start property to 0 for normal videos
