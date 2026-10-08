@@ -35,6 +35,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   bool _isDraggingScrubber = false;
   double _dragSliderValue = 0.0;
 
+  // Horizontal Swipe-to-Seek Gesture State
+  bool _isSwipingToSeek = false;
+  int _swipeStartPosMs = 0;
+  int _swipeSeekTargetMs = 0;
+  double _accumulatedSwipeDx = 0.0;
+
   @override
   void initState() {
     super.initState();
@@ -101,6 +107,53 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         _aspectRatio = BoxFit.contain;
       }
     });
+  }
+
+  // --- Horizontal Swipe to Seek Gestures ---
+  void _onHorizontalDragStart(DragStartDetails details) {
+    _hideControlsTimer?.cancel();
+    final currentMs = _controller.getCurrentAccuratePositionMs();
+    setState(() {
+      _isSwipingToSeek = true;
+      _swipeStartPosMs = currentMs;
+      _swipeSeekTargetMs = currentMs;
+      _accumulatedSwipeDx = 0.0;
+    });
+  }
+
+  void _onHorizontalDragUpdate(DragUpdateDetails details) {
+    if (!_isSwipingToSeek) return;
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    _accumulatedSwipeDx += details.primaryDelta ?? 0.0;
+
+    // Gesture Tuning: Swiping full width of screen seeks ~90 seconds (or scaled proportionally)
+    final totalDurationMs = _controller.duration.inMilliseconds > 0 
+        ? _controller.duration.inMilliseconds 
+        : 60000;
+    final swipeSensitivitySeconds = (totalDurationMs > 300000) ? 120.0 : 60.0;
+    final deltaSeconds = (_accumulatedSwipeDx / (screenWidth * 0.75)) * swipeSensitivitySeconds;
+    final deltaMs = (deltaSeconds * 1000).toInt();
+
+    final newTargetMs = (_swipeStartPosMs + deltaMs).clamp(0, totalDurationMs);
+
+    setState(() {
+      _swipeSeekTargetMs = newTargetMs;
+    });
+  }
+
+  Future<void> _onHorizontalDragEnd(DragEndDetails details) async {
+    if (!_isSwipingToSeek) return;
+
+    final targetMs = _swipeSeekTargetMs;
+    setState(() {
+      _isSwipingToSeek = false;
+    });
+
+    _startHideControlsTimer();
+
+    // Execute single crisp seek to target position
+    await _controller.seekTo(Duration(milliseconds: targetMs));
   }
 
   /// Guaranteed Safe Exit Handshake:
@@ -178,6 +231,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: _toggleControls,
+              onHorizontalDragStart: _onHorizontalDragStart,
+              onHorizontalDragUpdate: _onHorizontalDragUpdate,
+              onHorizontalDragEnd: _onHorizontalDragEnd,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -207,6 +263,62 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                             strokeWidth: 2.5,
                             valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
                           ),
+                        ),
+                      ),
+                    ),
+
+                  // 3. Swipe-to-Seek Interactive Center HUD
+                  if (_isSwipingToSeek)
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.8),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24, width: 1.2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.6),
+                              blurRadius: 20,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _swipeSeekTargetMs >= _swipeStartPosMs
+                                      ? LucideIcons.fastForward
+                                      : LucideIcons.rewind,
+                                  color: palette.primary,
+                                  size: 28,
+                                ),
+                                const SizedBox(width: 10),
+                                Text(
+                                  '${_swipeSeekTargetMs >= _swipeStartPosMs ? "+" : ""}${((_swipeSeekTargetMs - _swipeStartPosMs) / 1000).toInt()}s',
+                                  style: TextStyle(
+                                    color: palette.primary,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${_formatDuration(Duration(milliseconds: _swipeSeekTargetMs))} / ${_formatDuration(duration)}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -412,7 +524,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                       overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
                                     ),
                                     child: Slider(
-                                      value: _isDraggingScrubber ? _dragSliderValue : currentPosMs,
+                                      value: _isSwipingToSeek
+                                          ? _swipeSeekTargetMs.toDouble().clamp(0.0, maxDurationMs)
+                                          : (_isDraggingScrubber ? _dragSliderValue : currentPosMs),
                                       min: 0.0,
                                       max: maxDurationMs,
                                       onChangeStart: (val) {
@@ -442,7 +556,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
-                                          _formatDuration(position),
+                                          _formatDuration(
+                                            _isSwipingToSeek
+                                                ? Duration(milliseconds: _swipeSeekTargetMs)
+                                                : position,
+                                          ),
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 12,
