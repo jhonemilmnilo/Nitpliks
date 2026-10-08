@@ -102,16 +102,31 @@ class PlaybackDatabaseService {
   }
 
   /// Get the saved playback position for a specific video
+  /// Searches by path or ID to handle any device path formatting nuances
   /// Returns null if never played, finished, or position is negligible (< 3 seconds)
-  Future<PlaybackHistoryRecord?> getPlaybackRecord(String videoPath) async {
+  Future<PlaybackHistoryRecord?> getPlaybackRecord({
+    required String videoPath,
+    String? videoId,
+  }) async {
     try {
       final db = await database;
-      final results = await db.query(
-        tableName,
-        where: 'video_path = ?',
-        whereArgs: [videoPath],
-        limit: 1,
-      );
+      List<Map<String, dynamic>> results;
+      
+      if (videoId != null && videoId.isNotEmpty) {
+        results = await db.query(
+          tableName,
+          where: 'video_path = ? OR video_id = ?',
+          whereArgs: [videoPath, videoId],
+          limit: 1,
+        );
+      } else {
+        results = await db.query(
+          tableName,
+          where: 'video_path = ?',
+          whereArgs: [videoPath],
+          limit: 1,
+        );
+      }
 
       if (results.isNotEmpty) {
         return PlaybackHistoryRecord.fromMap(results.first);
@@ -133,12 +148,12 @@ class PlaybackDatabaseService {
       final db = await database;
       final now = DateTime.now().millisecondsSinceEpoch;
 
-      // Rule: If video completed (>= 95%) or explicitly reset
+      // Rule: If video completed (>= 95% of duration) or explicitly reset
       final bool isNearEnd = durationMs > 0 && positionMs >= (durationMs * 0.95);
       final bool isCompleted = reset || isNearEnd;
-      final int savedPos = (isCompleted || positionMs < 3000) ? 0 : positionMs;
+      final int savedPos = isCompleted ? 0 : positionMs;
 
-      // On-demand Upsert via SQLite Conflict Resolution
+      // Upsert: update exact position and timestamps
       await db.rawInsert('''
         INSERT INTO $tableName (
           video_path,
@@ -153,7 +168,7 @@ class PlaybackDatabaseService {
           video_id = excluded.video_id,
           title = excluded.title,
           last_position_ms = excluded.last_position_ms,
-          duration_ms = excluded.duration_ms,
+          duration_ms = CASE WHEN excluded.duration_ms > 0 THEN excluded.duration_ms ELSE $tableName.duration_ms END,
           is_completed = excluded.is_completed,
           last_played_at = excluded.last_played_at
       ''', [

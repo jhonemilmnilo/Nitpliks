@@ -9,6 +9,8 @@ import 'package:video_player/domain/models/media_models.dart';
 import 'package:video_player/presentation/folder/widgets/video_action_bottom_sheet.dart';
 import 'package:video_player/presentation/home/providers/media_provider.dart';
 
+import 'package:video_player/data/services/playback_database_service.dart';
+
 class VideoListItem extends ConsumerStatefulWidget {
   final VideoModel video;
   final String folderId;
@@ -27,11 +29,13 @@ class VideoListItem extends ConsumerStatefulWidget {
 
 class _VideoListItemState extends ConsumerState<VideoListItem> {
   Future<String?>? _thumbnailFuture;
+  int? _lastPositionMs;
 
   @override
   void initState() {
     super.initState();
     _initThumbnail();
+    _loadPlaybackProgress();
   }
 
   @override
@@ -39,7 +43,21 @@ class _VideoListItemState extends ConsumerState<VideoListItem> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.video.path != widget.video.path) {
       _initThumbnail();
+      _loadPlaybackProgress();
     }
+  }
+
+  void _loadPlaybackProgress() {
+    PlaybackDatabaseService.instance.getPlaybackRecord(
+      videoPath: widget.video.path,
+      videoId: widget.video.id,
+    ).then((record) {
+      if (mounted) {
+        setState(() {
+          _lastPositionMs = (record != null && !record.isCompleted) ? record.lastPositionMs : null;
+        });
+      }
+    });
   }
 
   void _initThumbnail() {
@@ -149,6 +167,34 @@ class _VideoListItemState extends ConsumerState<VideoListItem> {
                           ),
                         ),
                       ),
+
+                      // Netflix-style Watch Progress Bar (bottom edge of thumbnail)
+                      if (_lastPositionMs != null &&
+                          _lastPositionMs! > 2000 &&
+                          widget.video.duration.inMilliseconds > 0)
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            height: 3.5,
+                            color: Colors.black45,
+                            child: FractionallySizedBox(
+                              alignment: Alignment.centerLeft,
+                              widthFactor: (_lastPositionMs! / widget.video.duration.inMilliseconds).clamp(0.0, 1.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: palette.primary,
+                                  borderRadius: const BorderRadius.only(
+                                    bottomLeft: Radius.circular(8),
+                                    topRight: Radius.circular(2),
+                                    bottomRight: Radius.circular(2),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -173,6 +219,43 @@ class _VideoListItemState extends ConsumerState<VideoListItem> {
                       ),
                     ),
                     const SizedBox(height: 4),
+                    // Progress & Duration Information Badge (When partially watched)
+                    if (_lastPositionMs != null &&
+                        _lastPositionMs! > 2000 &&
+                        widget.video.duration.inMilliseconds > 0) ...[
+                      Row(
+                        children: [
+                          Icon(LucideIcons.playCircle, size: 12, color: palette.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Resume: ${_formatMs(_lastPositionMs!)} / ${widget.video.formattedDuration}',
+                            style: TextStyle(
+                              color: palette.primary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: palette.primary.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              '${((_lastPositionMs! / widget.video.duration.inMilliseconds) * 100).toInt()}%',
+                              style: TextStyle(
+                                color: palette.primary,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                    ],
                     Row(
                       children: [
                         Text(
@@ -271,6 +354,17 @@ class _VideoListItemState extends ConsumerState<VideoListItem> {
         size: 22,
       ),
     );
+  }
+
+  String _formatMs(int ms) {
+    final d = Duration(milliseconds: ms);
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   String _formatDate(DateTime dt) {

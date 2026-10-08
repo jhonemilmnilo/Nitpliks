@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import '../../app/theme/palette_provider.dart';
+import '../../data/services/playback_database_service.dart';
 import '../../domain/models/media_models.dart';
 import '../home/providers/media_provider.dart';
 import '../home/widgets/video_list_item.dart';
@@ -25,6 +26,7 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   bool _isModalOpen = false;
+  int _listVersionCounter = 0;
 
   @override
   void dispose() {
@@ -284,18 +286,35 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                           (context, index) {
                             final video = filteredVideos[index];
                             return VideoListItem(
+                              key: ValueKey('${video.path}_$_listVersionCounter'),
                               video: video,
                               folderId: widget.folder.id,
-                              onTap: () {
-                                Navigator.push(
+                              onTap: () async {
+                                final record = await PlaybackDatabaseService.instance.getPlaybackRecord(
+                                  videoPath: video.path,
+                                  videoId: video.id,
+                                );
+                                final resumeMs = (record != null && !record.isCompleted && record.lastPositionMs >= 2000)
+                                    ? record.lastPositionMs
+                                    : 0;
+
+                                if (!context.mounted) return;
+
+                                await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => PlayerScreen(
                                       videos: filteredVideos,
                                       initialIndex: index,
+                                      initialPositionMs: resumeMs,
                                     ),
                                   ),
                                 );
+                                if (context.mounted) {
+                                  setState(() {
+                                    _listVersionCounter++;
+                                  });
+                                }
                               },
                             );
                           },
