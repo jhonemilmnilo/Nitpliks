@@ -6,6 +6,7 @@ import '../../data/services/playback_database_service.dart';
 import '../../domain/models/media_models.dart';
 import '../home/providers/media_provider.dart';
 import '../home/widgets/video_list_item.dart';
+import '../player/controllers/player_playback_controller.dart';
 import '../player/player_screen.dart';
 import 'providers/video_sort_provider.dart';
 import 'widgets/video_sort_bottom_sheet.dart';
@@ -294,9 +295,8 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                                   videoPath: video.path,
                                   videoId: video.id,
                                 );
-                                final resumeMs = (record != null && !record.isCompleted && record.lastPositionMs >= 2000)
-                                    ? record.lastPositionMs
-                                    : 0;
+                                final rawPosMs = (record != null && !record.isCompleted) ? record.lastPositionMs : 0;
+                                final resumeMs = PlayerPlaybackController.calculateRewindResumeMs(rawPosMs, rewindSeconds: 10);
 
                                 if (!context.mounted) return;
 

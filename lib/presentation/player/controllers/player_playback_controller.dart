@@ -17,6 +17,19 @@ enum PlaybackStateStatus {
 /// Comprehensive, bulletproof playback controller
 /// Isolates native MediaKit lifecycle and guarantees 100% reliable position persistence
 class PlayerPlaybackController extends ChangeNotifier {
+  /// Netflix/Prime-style resume recap helper:
+  /// Rewinds 10 seconds on resume for context unless the video is near the beginning.
+  static int calculateRewindResumeMs(int savedPositionMs, {int rewindSeconds = 10}) {
+    if (savedPositionMs <= 5000) {
+      return 0; // Less than 5s: start from scratch
+    }
+    final rewindMs = rewindSeconds * 1000;
+    if (savedPositionMs <= rewindMs) {
+      return 0; // Between 5s and 10s: clamp to start
+    }
+    return savedPositionMs - rewindMs;
+  }
+
   final List<VideoModel> videos;
   int currentIndex;
 
@@ -164,7 +177,7 @@ class PlayerPlaybackController extends ChangeNotifier {
 
         final savedPosMs = record?.lastPositionMs ?? 0;
         final isCompleted = record?.isCompleted ?? false;
-        targetResumeMs = (!isCompleted && savedPosMs >= 2000) ? savedPosMs : 0;
+        targetResumeMs = (!isCompleted) ? calculateRewindResumeMs(savedPosMs) : 0;
 
         _targetResumeMs = targetResumeMs;
         _lastKnownValidPosMs = targetResumeMs;
