@@ -11,7 +11,6 @@ class SubtitleDrawer extends ConsumerStatefulWidget {
   final ValueChanged<SubtitleTrack> onTrackSelected;
   final VoidCallback? onOpenFile;
   final VoidCallback? onOnlineDownload;
-  final VoidCallback? onAiGenerate;
 
   const SubtitleDrawer({
     super.key,
@@ -20,7 +19,6 @@ class SubtitleDrawer extends ConsumerStatefulWidget {
     required this.onTrackSelected,
     this.onOpenFile,
     this.onOnlineDownload,
-    this.onAiGenerate,
   });
 
   static Future<void> show(
@@ -30,7 +28,6 @@ class SubtitleDrawer extends ConsumerStatefulWidget {
     required ValueChanged<SubtitleTrack> onTrackSelected,
     VoidCallback? onOpenFile,
     VoidCallback? onOnlineDownload,
-    VoidCallback? onAiGenerate,
   }) {
     return showGeneralDialog(
       context: context,
@@ -47,7 +44,6 @@ class SubtitleDrawer extends ConsumerStatefulWidget {
             onTrackSelected: onTrackSelected,
             onOpenFile: onOpenFile,
             onOnlineDownload: onOnlineDownload,
-            onAiGenerate: onAiGenerate,
           ),
         );
       },
@@ -267,17 +263,6 @@ class _SubtitleDrawerState extends ConsumerState<SubtitleDrawer> {
                             WidgetsBinding.instance.addPostFrameCallback((_) {
                               widget.onOnlineDownload?.call();
                             });
-                          },
-                        ),
-
-                        _buildRowAction(
-                          label: 'AI generate',
-                          icon: LucideIcons.sparkles,
-                          palette: palette,
-                          badge: 'Offline',
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            widget.onAiGenerate?.call();
                           },
                         ),
                       ],
