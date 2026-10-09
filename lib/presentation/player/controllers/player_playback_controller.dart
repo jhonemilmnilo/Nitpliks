@@ -105,20 +105,14 @@ class PlayerPlaybackController extends ChangeNotifier {
       }
     });
 
-    // Realtime Position stream
+    // Realtime Position stream - Single Source of Truth from native player
     _positionSub = player.stream.position.listen((pos) {
       if (_isDisposed) return;
 
-      // When seeking or loading, do not let native 0ms ticks overwrite valid saved timestamps
-      if (status != PlaybackStateStatus.ready) {
-        return;
-      }
-
       final posMs = pos.inMilliseconds;
 
-      // If we resumed at e.g. 600,000ms (10 mins), don't allow a spurious 0-2000ms tick to reset _lastKnownValidPosMs
-      if (_targetResumeMs > 3000 && posMs < (_targetResumeMs - 3000)) {
-        debugPrint('⚠️ [PLAYBACK POSITION TICK IGNORED] Native tick ($posMs ms) before reaching resume target ($_targetResumeMs ms)');
+      // During seeking/loading, do NOT accept 0ms startup ticks as valid position
+      if (status != PlaybackStateStatus.ready) {
         return;
       }
 
@@ -129,7 +123,7 @@ class PlayerPlaybackController extends ChangeNotifier {
       position = pos;
       notifyListeners();
 
-      // Throttled autosave every 3 seconds during active playback
+      // Throttled autosave every 3 seconds during ACTIVE, READY playback only
       final now = DateTime.now().millisecondsSinceEpoch;
       if (now - _lastAutosaveMs > 3000 && posMs >= 1000) {
         _lastAutosaveMs = now;
@@ -159,7 +153,7 @@ class PlayerPlaybackController extends ChangeNotifier {
     });
   }
 
-  /// Load and start the current video, seeking to the exact saved position
+  /// Load and start the current video, cleanly resuming at the target position
   Future<void> initAndPlay() async {
     status = PlaybackStateStatus.loadingRecord;
     notifyListeners();
@@ -167,7 +161,7 @@ class PlayerPlaybackController extends ChangeNotifier {
     try {
       int targetResumeMs = _targetResumeMs;
 
-      // 1. Fetch saved record from SQLite if not already pre-seeded by Layer 1
+      // 1. Fetch saved record from SQLite if not already pre-seeded
       if (targetResumeMs == 0) {
         debugPrint('🎬 [PLAYBACK INIT] Checking DB record for path: ${currentVideo.path} (id: ${currentVideo.id})');
         final record = await PlaybackDatabaseService.instance.getPlaybackRecord(
@@ -192,71 +186,43 @@ class PlayerPlaybackController extends ChangeNotifier {
         debugPrint('⚡ [PLAYBACK INIT] Fast-lane resume using pre-seeded position: $targetResumeMs ms');
       }
 
-      // 2. Open media
       status = PlaybackStateStatus.seeking;
       notifyListeners();
 
       if (targetResumeMs > 0) {
-        final startSeconds = (targetResumeMs / 1000.0).toStringAsFixed(3);
         final startOffset = Duration(milliseconds: targetResumeMs);
-        debugPrint('🎬 [PLAYBACK OPEN] Configuring libmpv native start offset: $startSeconds s ($startOffset)');
+        debugPrint('🎬 [PLAYBACK INIT ACTIVE] Opening media for live pipeline seek at: $startOffset');
 
-        // Direct Native libmpv backend bridge: Set 'start' and 'hr-seek' properties BEFORE loading file
-        try {
-          final dynamic platformPlayer = player.platform;
-          if (platformPlayer != null) {
-            await platformPlayer.setProperty('start', startSeconds);
-            await platformPlayer.setProperty('hr-seek', 'yes');
-            debugPrint('⚡ [PLAYBACK NATIVE MPV] Successfully injected "start=$startSeconds" & "hr-seek=yes" into libmpv!');
-          }
-        } catch (e) {
-          debugPrint('⚠️ [PLAYBACK NATIVE MPV PROPERTY ERROR] $e');
-        }
-
-        // Open media initially paused to prevent race condition with hardware decoder
+        // Step 1: Open video with playback active so MediaCodec pipelines are initialized
         await player.open(
-          Media(
-            currentVideo.path,
-            start: startOffset,
-          ),
-          play: false,
+          Media(currentVideo.path),
+          play: true,
         );
 
-        // Wait until duration/metadata is loaded so mpv knows the total timeline
+        // Step 2: Wait until the hardware decoder is actively streaming packets (> 0ms)
         try {
-          await player.stream.duration
-              .firstWhere((d) => d > Duration.zero)
+          await player.stream.position
+              .firstWhere((p) => p.inMilliseconds > 0)
               .timeout(const Duration(milliseconds: 2500));
-        } catch (_) {}
+          debugPrint('🎬 [PLAYBACK INIT ACTIVE] Decoder confirmed active. Performing instant seek...');
+        } catch (_) {
+          debugPrint('⚠️ [PLAYBACK INIT ACTIVE] Stream position wait timed out. Forcing seek.');
+        }
 
-        // Small breather for MediaCodec buffers to be initialized
-        await Future.delayed(const Duration(milliseconds: 100));
-
-        // Execute precise seek to resume position
-        debugPrint('🎬 [PLAYBACK ENFORCE SEEK] Executing seek to: $startOffset');
+        // Step 3: Seek on the active, decoding pipeline
         await player.seek(startOffset);
 
-        // Small pause to let native seek settle before starting playback
-        // Unpause playback
-        await player.play();
-        debugPrint('🎯 [PLAYBACK SYNC] Play command dispatched, verifying playback keyframe position...');
-
-        // Verify if position is actually near resume target; if Android MediaCodec snapped back to 0, enforce active seek!
-        await Future.delayed(const Duration(milliseconds: 200));
-        final actualPos = player.state.position.inMilliseconds;
-        debugPrint('🎬 [PLAYBACK AUDIT] Native position after play: $actualPos ms (Target: $targetResumeMs ms)');
-        if (actualPos < (targetResumeMs - 4000)) {
-          debugPrint('🚨 [PLAYBACK SNAPBACK DETECTED] Enforcing active live seek to: $startOffset');
-          await player.seek(startOffset);
+        // Step 4: Wait until the hardware position actually arrives at the resume window
+        try {
+          final arrivalThresholdMs = (targetResumeMs - 3000).clamp(0, targetResumeMs);
+          await player.stream.position
+              .firstWhere((p) => p.inMilliseconds >= arrivalThresholdMs)
+              .timeout(const Duration(milliseconds: 2000));
+          debugPrint('🎯 [PLAYBACK INIT ACTIVE] Native position confirmed arrived at resume point!');
+        } catch (_) {
+          debugPrint('⚠️ [PLAYBACK INIT ACTIVE] Arrival wait settled.');
         }
       } else {
-        // Reset start property to 0 for normal videos
-        try {
-          final dynamic platformPlayer = player.platform;
-          if (platformPlayer != null) {
-            await platformPlayer.setProperty('start', '0');
-          }
-        } catch (_) {}
         await player.open(Media(currentVideo.path), play: true);
       }
 
@@ -267,6 +233,13 @@ class PlayerPlaybackController extends ChangeNotifier {
         duration = currentVideo.duration;
       }
 
+      // Sync position to the real player position
+      if (player.state.position > Duration.zero) {
+        position = player.state.position;
+        _lastKnownValidPosMs = player.state.position.inMilliseconds;
+      }
+
+      // Step 5: Only NOW mark status as ready to lift the black curtain
       status = PlaybackStateStatus.ready;
       isPlaying = player.state.playing;
       notifyListeners();

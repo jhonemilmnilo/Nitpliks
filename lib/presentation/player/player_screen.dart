@@ -58,8 +58,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       initialPositionMs: widget.initialPositionMs,
     );
 
-    // 4. Start playback & resume state machine
-    _controller.initAndPlay();
+    // 4. Start playback & resume state machine after the Flutter widget tree has mounted the native Surface/Texture
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _controller.initAndPlay();
+      }
+    });
 
     // 5. Auto hide controls timer
     _startHideControlsTimer();
@@ -246,22 +250,35 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                     ),
                   ),
 
-                  // 2. Sleek Loading Spinner while seeking to resume point
+                  // 2. Seamless Black Curtain & Shimmer Spinner while preparing resume point
+                  // Ensures user NEVER sees a single frame of 00:00 before resume point locks in
                   if (isLoading)
-                    Center(
+                    Positioned.fill(
                       child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
+                        color: Colors.black,
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 36,
+                                height: 36,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 3,
+                                  valueColor: AlwaysStoppedAnimation<Color>(palette.primary),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                'Resuming playback...',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.7),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
