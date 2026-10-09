@@ -155,6 +155,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     });
   }
 
+  void _toggleOrientation() {
+    _startHideControlsTimer();
+    final orientation = MediaQuery.of(context).orientation;
+    if (orientation == Orientation.portrait) {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
+    }
+  }
+
   // --- Horizontal Swipe to Seek Gestures ---
   void _onHorizontalDragStart(DragStartDetails details) {
     if (_isScreenLocked) return;
@@ -664,12 +680,37 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                   ),
                                   const SizedBox(height: 8),
 
-                                  // BOTTOM ACTIONS (Fit / Aspect Ratio & Speed Drawer)
+                                  // BOTTOM ACTIONS (Rotate, Fit / Aspect Ratio, Speed Drawer)
                                   Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
+                                        // Screen Rotate Button (Pure Icon)
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(16),
+                                            onTap: _toggleOrientation,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: Colors.white24,
+                                                ),
+                                              ),
+                                              child: const Icon(
+                                                LucideIcons.screenShare,
+                                                size: 15,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+
                                         // Aspect Ratio / Fit Button
                                         Material(
                                           color: Colors.transparent,
