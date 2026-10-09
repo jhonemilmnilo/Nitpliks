@@ -43,6 +43,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   int _swipeSeekTargetMs = 0;
   double _accumulatedSwipeDx = 0.0;
 
+  // Screen Lock Mode State
+  bool _isScreenLocked = false;
+  bool _showUnlockButton = false;
+  Timer? _unlockButtonTimer;
+
   @override
   void initState() {
     super.initState();
@@ -96,12 +101,45 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _toggleControls() {
+    if (_isScreenLocked) {
+      _showUnlockButtonTemporarily();
+      return;
+    }
     setState(() => _showControls = !_showControls);
     if (_showControls) {
       _startHideControlsTimer();
     } else {
       _hideControlsTimer?.cancel();
     }
+  }
+
+  void _lockScreen() {
+    _hideControlsTimer?.cancel();
+    setState(() {
+      _isScreenLocked = true;
+      _showControls = false;
+    });
+    _showUnlockButtonTemporarily();
+  }
+
+  void _unlockScreen() {
+    _unlockButtonTimer?.cancel();
+    setState(() {
+      _isScreenLocked = false;
+      _showUnlockButton = false;
+      _showControls = true;
+    });
+    _startHideControlsTimer();
+  }
+
+  void _showUnlockButtonTemporarily() {
+    _unlockButtonTimer?.cancel();
+    setState(() => _showUnlockButton = true);
+    _unlockButtonTimer = Timer(const Duration(milliseconds: 3500), () {
+      if (mounted && _isScreenLocked) {
+        setState(() => _showUnlockButton = false);
+      }
+    });
   }
 
   void _cycleAspectRatio() {
@@ -119,6 +157,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   // --- Horizontal Swipe to Seek Gestures ---
   void _onHorizontalDragStart(DragStartDetails details) {
+    if (_isScreenLocked) return;
     _hideControlsTimer?.cancel();
     final currentMs = _controller.getCurrentAccuratePositionMs();
     setState(() {
@@ -130,7 +169,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (!_isSwipingToSeek) return;
+    if (_isScreenLocked || !_isSwipingToSeek) return;
 
     final screenWidth = MediaQuery.of(context).size.width;
     _accumulatedSwipeDx += details.primaryDelta ?? 0.0;
@@ -184,6 +223,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _hideControlsTimer?.cancel();
+    _unlockButtonTimer?.cancel();
 
     // Restore System UI & release wakelock
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -218,6 +258,10 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
+          if (_isScreenLocked) {
+            _showUnlockButtonTemporarily();
+            return;
+          }
           _handleExit();
         }
       },
@@ -340,186 +384,216 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
                   // 3. Clean Animated Controls Overlay
                   AnimatedOpacity(
-                    opacity: _showControls ? 1.0 : 0.0,
+                    opacity: _isScreenLocked
+                        ? (_showUnlockButton ? 1.0 : 0.0)
+                        : (_showControls ? 1.0 : 0.0),
                     duration: const Duration(milliseconds: 250),
                     child: IgnorePointer(
-                      ignoring: !_showControls,
+                      ignoring: _isScreenLocked ? !_showUnlockButton : !_showControls,
                       child: Stack(
                         children: [
-                          // Top Gradient
-                          Positioned(
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            child: Container(
-                              height: 110,
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.black87, Colors.transparent],
+                          // Top & Bottom Gradients (only when fully unlocked)
+                          if (!_isScreenLocked) ...[
+                            // Top Gradient
+                            Positioned(
+                              top: 0,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                height: 110,
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.black87, Colors.transparent],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
 
-                          // Bottom Gradient
-                          Positioned(
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            child: Container(
-                              height: 120,
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.bottomCenter,
-                                  end: Alignment.topCenter,
-                                  colors: [Colors.black87, Colors.transparent],
+                            // Bottom Gradient
+                            Positioned(
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              child: Container(
+                                height: 120,
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                    colors: [Colors.black87, Colors.transparent],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
 
-                          // TOP BAR
-                          SafeArea(
-                            child: Align(
-                              alignment: Alignment.topCenter,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                child: Row(
-                                  children: [
-                                    Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(24),
-                                        onTap: _handleExit,
-                                        child: const Padding(
-                                          padding: EdgeInsets.all(8.0),
-                                          child: Icon(LucideIcons.arrowLeft, color: Colors.white, size: 24),
+                            // TOP BAR
+                            SafeArea(
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                  child: Row(
+                                    children: [
+                                      Material(
+                                        color: Colors.transparent,
+                                        child: InkWell(
+                                          borderRadius: BorderRadius.circular(24),
+                                          onTap: _handleExit,
+                                          child: const Padding(
+                                            padding: EdgeInsets.all(8.0),
+                                            child: Icon(LucideIcons.arrowLeft, color: Colors.white, size: 24),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            currentVideo.title,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.bold,
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              currentVideo.title,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                              ),
                                             ),
-                                          ),
-                                          Text(
-                                            currentVideo.formattedSize,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.7),
-                                              fontSize: 11,
+                                            Text(
+                                              currentVideo.formattedSize,
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.7),
+                                                fontSize: 11,
+                                              ),
                                             ),
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                    IconButton(
-                                      onPressed: _cycleAspectRatio,
-                                      icon: const Icon(LucideIcons.scan, color: Colors.white, size: 20),
-                                      tooltip: 'Aspect Ratio',
-                                    ),
-                                  ],
+                                      IconButton(
+                                        onPressed: _cycleAspectRatio,
+                                        icon: const Icon(LucideIcons.scan, color: Colors.white, size: 20),
+                                        tooltip: 'Aspect Ratio',
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
+                          ],
 
                           // CENTER CONTROLS
                           Center(
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                // Previous
-                                IconButton(
-                                  iconSize: 28,
-                                  icon: Icon(
-                                    LucideIcons.skipBack,
-                                    color: _controller.hasPrevious ? Colors.white : Colors.white24,
-                                  ),
-                                  onPressed: _controller.hasPrevious
-                                      ? () {
-                                          _startHideControlsTimer();
-                                          _controller.playPrevious();
-                                        }
-                                      : null,
-                                ),
-                                const SizedBox(width: 20),
+                                // Other playback controls (hidden via Opacity when locked so the lock button NEVER shifts its position)
+                                IgnorePointer(
+                                  ignoring: _isScreenLocked,
+                                  child: Opacity(
+                                    opacity: _isScreenLocked ? 0.0 : 1.0,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        // Previous
+                                        IconButton(
+                                          iconSize: 22,
+                                          icon: Icon(
+                                            LucideIcons.skipBack,
+                                            color: _controller.hasPrevious ? Colors.white : Colors.white24,
+                                          ),
+                                          onPressed: _controller.hasPrevious
+                                              ? () {
+                                                  _startHideControlsTimer();
+                                                  _controller.playPrevious();
+                                                }
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 14),
 
-                                // Seek -10s
-                                IconButton(
-                                  iconSize: 32,
-                                  icon: const Icon(LucideIcons.rotateCcw, color: Colors.white),
-                                  onPressed: () {
-                                    _startHideControlsTimer();
-                                    _controller.seekRelativeSeconds(-10);
-                                  },
-                                ),
-                                const SizedBox(width: 20),
+                                        // Seek -10s
+                                        IconButton(
+                                          iconSize: 26,
+                                          icon: const Icon(LucideIcons.rotateCcw, color: Colors.white),
+                                          onPressed: () {
+                                            _startHideControlsTimer();
+                                            _controller.seekRelativeSeconds(-10);
+                                          },
+                                        ),
+                                        const SizedBox(width: 14),
 
-                                // Main Play / Pause
-                                Material(
-                                  color: palette.primary,
-                                  shape: const CircleBorder(),
-                                  child: InkWell(
-                                    customBorder: const CircleBorder(),
-                                    onTap: () {
-                                      _startHideControlsTimer();
-                                      _controller.togglePlayPause();
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(16),
-                                      child: Icon(
-                                        isPlaying ? LucideIcons.pause : LucideIcons.play,
-                                        color: Colors.white,
-                                        size: 32,
-                                      ),
+                                        // Main Play / Pause
+                                        Material(
+                                          color: palette.primary,
+                                          shape: const CircleBorder(),
+                                          child: InkWell(
+                                            customBorder: const CircleBorder(),
+                                            onTap: () {
+                                              _startHideControlsTimer();
+                                              _controller.togglePlayPause();
+                                            },
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Icon(
+                                                isPlaying ? LucideIcons.pause : LucideIcons.play,
+                                                color: Colors.white,
+                                                size: 26,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+
+                                        // Seek +10s
+                                        IconButton(
+                                          iconSize: 26,
+                                          icon: const Icon(LucideIcons.rotateCw, color: Colors.white),
+                                          onPressed: () {
+                                            _startHideControlsTimer();
+                                            _controller.seekRelativeSeconds(10);
+                                          },
+                                        ),
+                                        const SizedBox(width: 14),
+
+                                        // Next
+                                        IconButton(
+                                          iconSize: 22,
+                                          icon: Icon(
+                                            LucideIcons.skipForward,
+                                            color: _controller.hasNext ? Colors.white : Colors.white24,
+                                          ),
+                                          onPressed: _controller.hasNext
+                                              ? () {
+                                                  _startHideControlsTimer();
+                                                  _controller.playNext();
+                                                }
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 12),
+                                      ],
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 20),
 
-                                // Seek +10s
+                                // Unified Lock / Unlock Button (Always stays exactly right beside next button!)
                                 IconButton(
-                                  iconSize: 32,
-                                  icon: const Icon(LucideIcons.rotateCw, color: Colors.white),
-                                  onPressed: () {
-                                    _startHideControlsTimer();
-                                    _controller.seekRelativeSeconds(10);
-                                  },
-                                ),
-                                const SizedBox(width: 20),
-
-                                // Next
-                                IconButton(
-                                  iconSize: 28,
+                                  iconSize: 22,
                                   icon: Icon(
-                                    LucideIcons.skipForward,
-                                    color: _controller.hasNext ? Colors.white : Colors.white24,
+                                    _isScreenLocked ? LucideIcons.lock : LucideIcons.unlock,
+                                    color: _isScreenLocked ? palette.primary : Colors.white,
                                   ),
-                                  onPressed: _controller.hasNext
-                                      ? () {
-                                          _startHideControlsTimer();
-                                          _controller.playNext();
-                                        }
-                                      : null,
+                                  tooltip: _isScreenLocked ? 'Unlock Screen' : 'Lock Screen',
+                                  onPressed: _isScreenLocked ? _unlockScreen : _lockScreen,
                                 ),
                               ],
                             ),
                           ),
 
-                          // BOTTOM TIMELINE & SCRUBBER
+                          // BOTTOM TIMELINE & SCRUBBER (Only when unlocked)
+                          if (!_isScreenLocked)
                           Positioned(
                             bottom: 16,
                             left: 16,
