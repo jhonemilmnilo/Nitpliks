@@ -146,13 +146,15 @@ class _SubtitleDrawerState extends ConsumerState<SubtitleDrawer> {
           border: Border(
             left: BorderSide(color: palette.border, width: 1),
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: palette.isDark ? 0.6 : 0.2),
-              blurRadius: 30,
-              offset: const Offset(-5, 0),
-            ),
-          ],
+          boxShadow: palette.isDark
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 30,
+                    offset: const Offset(-5, 0),
+                  ),
+                ]
+              : null,
         ),
         child: ClipRRect(
           borderRadius: const BorderRadius.horizontal(left: Radius.circular(24)),

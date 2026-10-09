@@ -97,13 +97,15 @@ class _PlaybackSpeedDrawerState extends ConsumerState<PlaybackSpeedDrawer> {
           color: palette.surface,
           borderRadius: const BorderRadius.horizontal(left: Radius.circular(24)),
           border: Border(left: BorderSide(color: palette.border)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.6),
-              blurRadius: 28,
-              offset: const Offset(-8, 0),
-            ),
-          ],
+          boxShadow: palette.isDark
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 28,
+                    offset: const Offset(-8, 0),
+                  ),
+                ]
+              : null,
         ),
         child: SafeArea(
           child: Column(
