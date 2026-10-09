@@ -473,11 +473,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                           ],
                                         ),
                                       ),
-                                      IconButton(
-                                        onPressed: _cycleAspectRatio,
-                                        icon: const Icon(LucideIcons.scan, color: Colors.white, size: 20),
-                                        tooltip: 'Aspect Ratio',
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -669,12 +664,61 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                   ),
                                   const SizedBox(height: 8),
 
-                                  // SPEED ADJUSTMENT BUTTON BAR (Below progress minutes)
+                                  // BOTTOM ACTIONS (Fit / Aspect Ratio & Speed Drawer)
                                   Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
+                                        // Aspect Ratio / Fit Button
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(16),
+                                            onTap: _cycleAspectRatio,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: _aspectRatio != BoxFit.contain
+                                                      ? palette.primary
+                                                      : Colors.white24,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    LucideIcons.scan,
+                                                    size: 14,
+                                                    color: _aspectRatio != BoxFit.contain
+                                                        ? palette.primary
+                                                        : Colors.white,
+                                                  ),
+                                                  const SizedBox(width: 5),
+                                                  Text(
+                                                    _aspectRatio == BoxFit.contain
+                                                        ? 'Fit'
+                                                        : (_aspectRatio == BoxFit.cover ? 'Crop' : 'Stretch'),
+                                                    style: TextStyle(
+                                                      color: _aspectRatio != BoxFit.contain
+                                                          ? palette.primary
+                                                          : Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                      letterSpacing: 0.3,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+
+                                        // SPEED ADJUSTMENT BUTTON
                                         Material(
                                           color: Colors.transparent,
                                           child: InkWell(
