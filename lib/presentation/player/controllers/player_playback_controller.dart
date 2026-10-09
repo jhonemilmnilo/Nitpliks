@@ -40,6 +40,7 @@ class PlayerPlaybackController extends ChangeNotifier {
   bool isPlaying = false;
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
+  double playbackSpeed = 1.0;
 
   // Track the most reliable position even if streams are momentarily desynced
   int _targetResumeMs = 0;
@@ -53,6 +54,7 @@ class PlayerPlaybackController extends ChangeNotifier {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _completedSub;
+  StreamSubscription<double>? _rateSub;
 
   VideoModel get currentVideo => videos[currentIndex];
   bool get hasPrevious => currentIndex > 0;
@@ -62,7 +64,9 @@ class PlayerPlaybackController extends ChangeNotifier {
     required this.videos,
     required this.currentIndex,
     int initialPositionMs = 0,
+    double initialSpeed = 1.0,
   }) {
+    playbackSpeed = initialSpeed;
     if (initialPositionMs >= 2000) {
       _targetResumeMs = initialPositionMs;
       _lastKnownValidPosMs = initialPositionMs;
@@ -94,6 +98,15 @@ class PlayerPlaybackController extends ChangeNotifier {
       if (_isDisposed) return;
       isPlaying = playing;
       notifyListeners();
+    });
+
+    // Rate stream
+    _rateSub = player.stream.rate.listen((r) {
+      if (_isDisposed) return;
+      if (r > 0 && r != playbackSpeed) {
+        playbackSpeed = r;
+        notifyListeners();
+      }
     });
 
     // Duration stream
@@ -239,6 +252,11 @@ class PlayerPlaybackController extends ChangeNotifier {
         _lastKnownValidPosMs = player.state.position.inMilliseconds;
       }
 
+      // Apply persisted playback speed if customized
+      if (playbackSpeed != 1.0) {
+        await player.setRate(playbackSpeed);
+      }
+
       // Step 5: Only NOW mark status as ready to lift the black curtain
       status = PlaybackStateStatus.ready;
       isPlaying = player.state.playing;
@@ -249,6 +267,13 @@ class PlayerPlaybackController extends ChangeNotifier {
       await player.play();
       notifyListeners();
     }
+  }
+
+  /// Change playback speed in real-time
+  Future<void> setPlaybackSpeed(double speed) async {
+    playbackSpeed = speed;
+    notifyListeners();
+    await player.setRate(speed);
   }
 
   /// Toggle Play / Pause with instant save on pause
@@ -367,6 +392,7 @@ class PlayerPlaybackController extends ChangeNotifier {
     _positionSub?.cancel();
     _durationSub?.cancel();
     _completedSub?.cancel();
+    _rateSub?.cancel();
     player.dispose();
     super.dispose();
   }
