@@ -45,6 +45,7 @@ class PlayerPlaybackController extends ChangeNotifier {
   VideoEnhanceMode enhanceMode = VideoEnhanceMode.off;
   Tracks tracks = const Tracks();
   Track selectedTrack = const Track();
+  List<String> subtitleText = const [];
 
   // Track the most reliable position even if streams are momentarily desynced
   int _targetResumeMs = 0;
@@ -61,6 +62,7 @@ class PlayerPlaybackController extends ChangeNotifier {
   StreamSubscription<double>? _rateSub;
   StreamSubscription<Tracks>? _tracksSub;
   StreamSubscription<Track>? _trackSub;
+  StreamSubscription<List<String>>? _subtitleSub;
 
   VideoModel get currentVideo => videos[currentIndex];
   bool get hasPrevious => currentIndex > 0;
@@ -186,6 +188,13 @@ class PlayerPlaybackController extends ChangeNotifier {
       selectedTrack = t;
       notifyListeners();
     });
+
+    // Real-time subtitle text stream
+    _subtitleSub = player.stream.subtitle.listen((lines) {
+      if (_isDisposed) return;
+      subtitleText = lines;
+      notifyListeners();
+    });
   }
 
   /// Load and start the current video, cleanly resuming at the target position
@@ -283,6 +292,14 @@ class PlayerPlaybackController extends ChangeNotifier {
       if (enhanceMode != VideoEnhanceMode.off) {
         await applyVideoEnhancement(enhanceMode);
       }
+
+      // Hide native mpv subtitle burn-in so only the interactive Flutter overlay is shown
+      try {
+        final native = player.platform;
+        if (native is NativePlayer) {
+          await native.setProperty('sub-font-size', '0');
+        }
+      } catch (_) {}
 
       // Step 5: Only NOW mark status as ready to lift the black curtain
       status = PlaybackStateStatus.ready;
@@ -464,6 +481,12 @@ class PlayerPlaybackController extends ChangeNotifier {
   /// Select subtitle track or turn off (SubtitleTrack.no())
   Future<void> setSubtitleTrack(SubtitleTrack subtitleTrack) async {
     await player.setSubtitleTrack(subtitleTrack);
+    try {
+      final native = player.platform;
+      if (native is NativePlayer) {
+        await native.setProperty('sub-font-size', '0');
+      }
+    } catch (_) {}
     notifyListeners();
   }
 
@@ -475,6 +498,10 @@ class PlayerPlaybackController extends ChangeNotifier {
         title: title ?? filePath.split(RegExp(r'[/\\]')).last,
       );
       await player.setSubtitleTrack(track);
+      final native = player.platform;
+      if (native is NativePlayer) {
+        await native.setProperty('sub-font-size', '0');
+      }
       notifyListeners();
       debugPrint('🎬 [EXTERNAL SUBTITLE LOADED] $filePath');
     } catch (e) {
@@ -492,6 +519,7 @@ class PlayerPlaybackController extends ChangeNotifier {
     _rateSub?.cancel();
     _tracksSub?.cancel();
     _trackSub?.cancel();
+    _subtitleSub?.cancel();
     player.dispose();
     super.dispose();
   }

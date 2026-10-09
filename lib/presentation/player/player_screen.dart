@@ -53,6 +53,19 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   bool _showUnlockButton = false;
   Timer? _unlockButtonTimer;
 
+  // Interactive Subtitle Drag & Pinch-to-Resize State
+  double _subtitleScale = 1.0;
+  double _baseSubtitleScale = 1.0;
+  Offset _subtitleOffset = Offset.zero;
+  Offset _dragStartSubtitleOffset = Offset.zero;
+  bool _isInteractingWithSubtitle = false;
+  List<String> _frozenSubtitleText = const [];
+
+  // Multi-Touch Pointer Tracking for Seamless Pinch Anywhere
+  final Map<int, Offset> _activePointers = {};
+  double? _initialPinchDistance;
+  double _pinchStartSubtitleScale = 1.0;
+
   @override
   void initState() {
     super.initState();
@@ -224,7 +237,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
 
   // --- Horizontal Swipe to Seek Gestures ---
   void _onHorizontalDragStart(DragStartDetails details) {
-    if (_isScreenLocked) return;
+    if (_isScreenLocked || _isInteractingWithSubtitle || _activePointers.length > 1) return;
     _hideControlsTimer?.cancel();
     final currentMs = _controller.getCurrentAccuratePositionMs();
     setState(() {
@@ -236,7 +249,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (_isScreenLocked || !_isSwipingToSeek) return;
+    if (_isScreenLocked || _isInteractingWithSubtitle || _activePointers.length > 1 || !_isSwipingToSeek) return;
 
     final screenWidth = MediaQuery.of(context).size.width;
     _accumulatedSwipeDx += details.primaryDelta ?? 0.0;
@@ -347,21 +360,63 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
             final maxDurationMs = duration.inMilliseconds > 0 ? duration.inMilliseconds.toDouble() : 1.0;
             final currentPosMs = position.inMilliseconds.toDouble().clamp(0.0, maxDurationMs);
 
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _toggleControls,
-              onHorizontalDragStart: _onHorizontalDragStart,
-              onHorizontalDragUpdate: _onHorizontalDragUpdate,
-              onHorizontalDragEnd: _onHorizontalDragEnd,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
+            return Listener(
+              onPointerDown: (event) {
+                _activePointers[event.pointer] = event.position;
+                if (_activePointers.length >= 2 && _isInteractingWithSubtitle) {
+                  // Initialize multi-touch pinch distance
+                  final points = _activePointers.values.toList();
+                  _initialPinchDistance = (points[0] - points[1]).distance;
+                  _pinchStartSubtitleScale = _subtitleScale;
+                }
+              },
+              onPointerMove: (event) {
+                _activePointers[event.pointer] = event.position;
+                // If user is interacting with subtitle and has 2+ fingers anywhere on screen
+                if (_isInteractingWithSubtitle && _activePointers.length >= 2) {
+                  final points = _activePointers.values.toList();
+                  final currentDistance = (points[0] - points[1]).distance;
+                  if (_initialPinchDistance != null && _initialPinchDistance! > 10) {
+                    final scaleFactor = currentDistance / _initialPinchDistance!;
+                    setState(() {
+                      _subtitleScale = (_pinchStartSubtitleScale * scaleFactor).clamp(0.7, 2.5);
+                    });
+                  } else {
+                    _initialPinchDistance = currentDistance;
+                    _pinchStartSubtitleScale = _subtitleScale;
+                  }
+                }
+              },
+              onPointerUp: (event) {
+                _activePointers.remove(event.pointer);
+                if (_activePointers.length < 2) {
+                  _initialPinchDistance = null;
+                }
+              },
+              onPointerCancel: (event) {
+                _activePointers.remove(event.pointer);
+                if (_activePointers.length < 2) {
+                  _initialPinchDistance = null;
+                }
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _toggleControls,
+                onHorizontalDragStart: _onHorizontalDragStart,
+                onHorizontalDragUpdate: _onHorizontalDragUpdate,
+                onHorizontalDragEnd: _onHorizontalDragEnd,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
                   // 1. Hardware Video Canvas
                   Center(
                     child: Video(
                       controller: _controller.videoController,
                       controls: NoVideoControls,
                       fit: _aspectRatio,
+                      subtitleViewConfiguration: const SubtitleViewConfiguration(
+                        visible: false,
+                      ),
                     ),
                   ),
 
@@ -446,6 +501,108 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                             ),
                           ),
                         ],
+                      ),
+                    ),
+
+                  // 4. INTERACTIVE DRAGGABLE & PINCH-TO-RESIZE SUBTITLE OVERLAY
+                  if (_controller.selectedTrack.subtitle != SubtitleTrack.no() &&
+                      ((_isInteractingWithSubtitle && _frozenSubtitleText.isNotEmpty && _frozenSubtitleText.any((s) => s.trim().isNotEmpty)) ||
+                       (!_isInteractingWithSubtitle && _controller.subtitleText.isNotEmpty && _controller.subtitleText.any((s) => s.trim().isNotEmpty))))
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        ignoring: _isScreenLocked,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Transform.translate(
+                            offset: _subtitleOffset,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 56, left: 24, right: 24),
+                              child: Listener(
+                                onPointerDown: (_) {
+                                  setState(() {
+                                    _isInteractingWithSubtitle = true;
+                                    _frozenSubtitleText = List.from(_controller.subtitleText);
+                                  });
+                                },
+                                onPointerUp: (_) {
+                                  if (_activePointers.isEmpty) {
+                                    setState(() {
+                                      _isInteractingWithSubtitle = false;
+                                    });
+                                  }
+                                },
+                                onPointerCancel: (_) {
+                                  if (_activePointers.isEmpty) {
+                                    setState(() {
+                                      _isInteractingWithSubtitle = false;
+                                    });
+                                  }
+                                },
+                                child: GestureDetector(
+                                  behavior: HitTestBehavior.opaque,
+                                  onDoubleTap: () {
+                                    // Double-tap to reset position and scale
+                                    setState(() {
+                                      _subtitleOffset = Offset.zero;
+                                      _subtitleScale = 1.0;
+                                    });
+                                  },
+                                  onScaleStart: (details) {
+                                    setState(() {
+                                      _isInteractingWithSubtitle = true;
+                                      if (_frozenSubtitleText.isEmpty) {
+                                        _frozenSubtitleText = List.from(_controller.subtitleText);
+                                      }
+                                    });
+                                    _baseSubtitleScale = _subtitleScale;
+                                    _dragStartSubtitleOffset = _subtitleOffset;
+                                  },
+                                  onScaleUpdate: (details) {
+                                    setState(() {
+                                      // Pinch scale (bounded between 0.7x and 2.5x)
+                                      _subtitleScale = (_baseSubtitleScale * details.scale).clamp(0.7, 2.5);
+                                      // Drag offset
+                                      _subtitleOffset = _dragStartSubtitleOffset + details.focalPointDelta;
+                                      _dragStartSubtitleOffset = _subtitleOffset;
+                                    });
+                                  },
+                                  onScaleEnd: (details) {
+                                    setState(() {
+                                      _isInteractingWithSubtitle = false;
+                                    });
+                                  },
+                                  child: Container(
+                                    color: Colors.transparent,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: (_isInteractingWithSubtitle ? _frozenSubtitleText : _controller.subtitleText)
+                                          .where((line) => line.trim().isNotEmpty)
+                                          .map(
+                                            (line) => Text(
+                                              line,
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: (18 * _subtitleScale).clamp(12.0, 45.0),
+                                                fontWeight: FontWeight.bold,
+                                                height: 1.25,
+                                                shadows: const [
+                                                  Shadow(color: Colors.black, blurRadius: 4, offset: Offset(1, 1)),
+                                                  Shadow(color: Colors.black, blurRadius: 4, offset: Offset(-1, -1)),
+                                                  Shadow(color: Colors.black, blurRadius: 6, offset: Offset(0, 0)),
+                                                ],
+                                              ),
+                                            ),
+                                          )
+                                          .toList(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ),
 
@@ -1003,10 +1160,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                   ),
                 ],
               ),
-            );
-          },
-        ),
+            ),
+          );
+        },
       ),
-    );
-  }
+    ),
+  );
+}
 }
