@@ -14,6 +14,7 @@ import 'package:video_player/presentation/player/controllers/player_playback_con
 import 'package:video_player/presentation/player/player_screen.dart';
 import 'providers/folder_sort_provider.dart';
 import 'providers/media_provider.dart';
+import 'widgets/animated_refresh_button.dart';
 import 'widgets/folder_card.dart';
 import 'widgets/folder_sort_bottom_sheet.dart';
 import 'widgets/home_recent_carousel.dart';
@@ -142,11 +143,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(LucideIcons.rotateCw, color: palette.textSecondary, size: 20),
+          AnimatedRefreshButton(
+            icon: LucideIcons.rotateCw,
+            color: palette.textSecondary,
+            size: 20,
             tooltip: 'Rescan Folders',
-            onPressed: () {
-              ref.invalidate(deviceFoldersProvider);
+            onRefresh: () async {
+              await Future.wait([
+                ref.refresh(deviceFoldersProvider.future),
+                _loadGlobalRecents(),
+              ]);
             },
           ),
           const SizedBox(width: 8),

@@ -5,6 +5,7 @@ import '../../app/theme/palette_provider.dart';
 import '../../data/services/playback_database_service.dart';
 import '../../domain/models/media_models.dart';
 import '../home/providers/media_provider.dart';
+import '../home/widgets/animated_refresh_button.dart';
 import '../home/widgets/video_list_item.dart';
 import '../player/controllers/player_playback_controller.dart';
 import '../player/player_screen.dart';
@@ -180,11 +181,16 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: Icon(LucideIcons.rotateCw, color: palette.textMuted, size: 19),
+          AnimatedRefreshButton(
+            icon: LucideIcons.rotateCw,
+            color: palette.textMuted,
+            size: 19,
             tooltip: 'Refresh videos',
-            onPressed: () {
-              ref.invalidate(folderVideosProvider(widget.folder.id));
+            onRefresh: () async {
+              _lastLoadedVideoPaths = [];
+              await ref.read(folderVideosProvider(widget.folder.id).notifier).refresh();
+              final videos = ref.read(folderVideosProvider(widget.folder.id)).value ?? [];
+              await _loadRecentsForFolder(videos);
             },
           ),
           const SizedBox(width: 4),
