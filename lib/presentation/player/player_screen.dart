@@ -83,8 +83,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     // 1. Keep display awake
     WakelockPlus.enable();
 
-    // 2. Immersive sticky full screen
+    // 2. Immersive sticky full screen & default to landscape playback
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
     WidgetsBinding.instance.addObserver(this);
 
     // 3. Initialize clean modular playback controller with synchronous resume point and persisted speed & enhancement
@@ -204,22 +208,6 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         _aspectRatio = BoxFit.contain;
       }
     });
-  }
-
-  void _toggleOrientation() {
-    _startHideControlsTimer();
-    final orientation = MediaQuery.of(context).orientation;
-    if (orientation == Orientation.portrait) {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.landscapeLeft,
-        DeviceOrientation.landscapeRight,
-      ]);
-    } else {
-      SystemChrome.setPreferredOrientations([
-        DeviceOrientation.portraitUp,
-        DeviceOrientation.portraitDown,
-      ]);
-    }
   }
 
   /// Open file picker strictly filtered to subtitle formats (.srt, .ass, .vtt, .ssa, .sub)
@@ -1115,37 +1103,12 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                   ),
                                   const SizedBox(height: 8),
 
-                                  // BOTTOM ACTIONS (Rotate, Fit / Aspect Ratio, Speed Drawer)
+                                  // BOTTOM ACTIONS (Fit / Aspect Ratio, Speed Drawer)
                                   Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 16),
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
-                                        // Screen Rotate Button (Pure Icon)
-                                        Material(
-                                          color: Colors.transparent,
-                                          child: InkWell(
-                                            borderRadius: BorderRadius.circular(16),
-                                            onTap: _toggleOrientation,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                              decoration: BoxDecoration(
-                                                color: Colors.white.withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(16),
-                                                border: Border.all(
-                                                  color: Colors.white24,
-                                                ),
-                                              ),
-                                              child: const Icon(
-                                                LucideIcons.screenShare,
-                                                size: 15,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-
                                         // Aspect Ratio / Fit Button
                                         Material(
                                           color: Colors.transparent,

@@ -15,10 +15,16 @@ import 'widgets/video_sort_bottom_sheet.dart';
 
 class FolderDetailScreen extends ConsumerStatefulWidget {
   final DeviceFolderModel folder;
+  final String? initialPlayVideoId;
+  final String? initialPlayVideoPath;
+  final int? initialResumePositionMs;
 
   const FolderDetailScreen({
     super.key,
     required this.folder,
+    this.initialPlayVideoId,
+    this.initialPlayVideoPath,
+    this.initialResumePositionMs,
   });
 
   @override
@@ -31,6 +37,7 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
   bool _isModalOpen = false;
   int _listVersionCounter = 0;
   List<FolderRecentItem> _recentItems = [];
+  bool _hasTriggeredAutoPlay = false;
 
   @override
   void dispose() {
@@ -39,6 +46,49 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
   }
 
   List<String> _lastLoadedVideoPaths = [];
+
+  void _checkAndTriggerAutoPlay(List<VideoModel> allVideos) {
+    if (_hasTriggeredAutoPlay) return;
+    if (widget.initialPlayVideoId == null && widget.initialPlayVideoPath == null) return;
+
+    _hasTriggeredAutoPlay = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || allVideos.isEmpty) return;
+
+      int targetIndex = -1;
+      if (widget.initialPlayVideoPath != null) {
+        targetIndex = allVideos.indexWhere((v) => v.path == widget.initialPlayVideoPath);
+      }
+      if (targetIndex < 0 && widget.initialPlayVideoId != null) {
+        targetIndex = allVideos.indexWhere((v) => v.id == widget.initialPlayVideoId);
+      }
+
+      if (targetIndex < 0) {
+        targetIndex = 0;
+      }
+
+      final resumeMs = widget.initialResumePositionMs ?? 0;
+
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlayerScreen(
+            videos: allVideos,
+            initialIndex: targetIndex,
+            initialPositionMs: resumeMs,
+          ),
+        ),
+      );
+
+      if (mounted) {
+        setState(() {
+          _listVersionCounter++;
+        });
+        _forceReloadRecents(allVideos);
+      }
+    });
+  }
 
   Future<void> _loadRecentsForFolder(List<VideoModel> videos) async {
     if (videos.isEmpty) {
@@ -247,6 +297,9 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
 
               // Auto-load recently played items for this folder
               _loadRecentsForFolder(allVideos);
+
+              // Check if launched from Recent items and auto-play
+              _checkAndTriggerAutoPlay(allVideos);
 
               if (filteredVideos.isEmpty && _searchQuery.isNotEmpty) {
                 return Center(

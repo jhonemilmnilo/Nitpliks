@@ -345,23 +345,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 rewindSeconds: 10,
                               );
 
-                              final allRecentVideos = _recentItems.map((e) => e.video).toList();
-                              final targetIdx = allRecentVideos.indexWhere((v) => v.path == recentItem.video.path);
-                              final videoList = targetIdx >= 0 ? allRecentVideos : [recentItem.video, ...allRecentVideos];
-                              final initialIdx = targetIdx >= 0 ? targetIdx : 0;
-
                               if (!context.mounted) return;
 
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PlayerScreen(
-                                    videos: videoList,
-                                    initialIndex: initialIdx,
-                                    initialPositionMs: resumeMs,
+                              // Find the matching folder that contains this video
+                              final videoFile = File(recentItem.video.path);
+                              final videoParentDir = videoFile.parent.path.toLowerCase();
+
+                              DeviceFolderModel? matchedFolder;
+                              for (final f in result.folders) {
+                                // Match by folder name or id
+                                if (f.name.toLowerCase() == recentItem.video.parentFolder.toLowerCase()) {
+                                  matchedFolder = f;
+                                  break;
+                                }
+                              }
+
+                              // Fallback match by directory path structure if not found by name
+                              if (matchedFolder == null) {
+                                for (final f in result.folders) {
+                                  if (videoParentDir.endsWith(f.name.toLowerCase())) {
+                                    matchedFolder = f;
+                                    break;
+                                  }
+                                }
+                              }
+
+                              if (matchedFolder != null) {
+                                // OPTION B: Navigate to FolderDetailScreen with auto-play parameters.
+                                // When the user hits Back in PlayerScreen, they land directly inside the Folder's video list!
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => FolderDetailScreen(
+                                      folder: matchedFolder!,
+                                      initialPlayVideoId: recentItem.video.id,
+                                      initialPlayVideoPath: recentItem.video.path,
+                                      initialResumePositionMs: resumeMs,
+                                    ),
                                   ),
-                                ),
-                              );
+                                );
+                              } else {
+                                // Fallback: If folder is not found or was external, play directly
+                                final allRecentVideos = _recentItems.map((e) => e.video).toList();
+                                final targetIdx = allRecentVideos.indexWhere((v) => v.path == recentItem.video.path);
+                                final videoList = targetIdx >= 0 ? allRecentVideos : [recentItem.video, ...allRecentVideos];
+                                final initialIdx = targetIdx >= 0 ? targetIdx : 0;
+
+                                await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => PlayerScreen(
+                                      videos: videoList,
+                                      initialIndex: initialIdx,
+                                      initialPositionMs: resumeMs,
+                                    ),
+                                  ),
+                                );
+                              }
 
                               if (context.mounted) {
                                 _loadGlobalRecents();
