@@ -207,13 +207,13 @@ class PlaybackDatabaseService {
     }
   }
 
-  /// Retrieve top recently played videos for the Home Screen / Continue Watching shelf
-  Future<List<PlaybackHistoryRecord>> getRecentlyPlayed({int limit = 15}) async {
+  /// Retrieve top recently played videos across all folders for the Home Screen
+  /// Returns records ordered by latest played timestamp
+  Future<List<PlaybackHistoryRecord>> getRecentlyPlayed({int limit = 7}) async {
     try {
       final db = await database;
       final results = await db.query(
         tableName,
-        where: 'last_position_ms > 0 AND is_completed = 0',
         orderBy: 'last_played_at DESC',
         limit: limit,
       );

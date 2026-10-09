@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
@@ -5,12 +6,17 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:video_player/app/theme/app_theme.dart';
 import 'package:video_player/app/theme/palette_provider.dart';
 import 'package:video_player/data/services/device_media_service.dart';
+import 'package:video_player/data/services/playback_database_service.dart';
 import 'package:video_player/domain/models/media_models.dart';
 import 'package:video_player/presentation/folder/folder_detail_screen.dart';
+import 'package:video_player/presentation/folder/widgets/folder_recent_carousel.dart';
+import 'package:video_player/presentation/player/controllers/player_playback_controller.dart';
+import 'package:video_player/presentation/player/player_screen.dart';
 import 'providers/folder_sort_provider.dart';
 import 'providers/media_provider.dart';
 import 'widgets/folder_card.dart';
 import 'widgets/folder_sort_bottom_sheet.dart';
+import 'widgets/home_recent_carousel.dart';
 import 'widgets/settings_bottom_sheet.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -24,6 +30,49 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   bool _isModalOpen = false;
+  List<FolderRecentItem> _recentItems = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGlobalRecents();
+  }
+
+  Future<void> _loadGlobalRecents() async {
+    try {
+      final records = await PlaybackDatabaseService.instance.getRecentlyPlayed(limit: 7);
+      if (records.isEmpty) {
+        if (mounted && _recentItems.isNotEmpty) {
+          setState(() => _recentItems = []);
+        }
+        return;
+      }
+
+      final items = <FolderRecentItem>[];
+      for (final r in records) {
+        final file = File(r.videoPath);
+        if (await file.exists()) {
+          final parentName = file.parent.path.split(Platform.pathSeparator).last;
+          final video = VideoModel(
+            id: r.videoId ?? r.videoPath,
+            title: r.title,
+            path: r.videoPath,
+            duration: Duration(milliseconds: r.durationMs),
+            sizeInBytes: await file.length(),
+            parentFolder: parentName.isNotEmpty ? parentName : 'Videos',
+            modifiedDate: await file.lastModified(),
+          );
+          items.add(FolderRecentItem(video: video, record: r));
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _recentItems = items;
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -264,26 +313,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 }
 
                 // Virtualized CustomScrollView with pure Slivers for 120Hz smooth scrolling
-                return CustomScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(
-                    parent: BouncingScrollPhysics(),
-                  ),
-                  slivers: [
-                    // Header Count indicator with interactive Sort Button
-                    SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Folders (${filteredFolders.length})',
-                              style: TextStyle(
-                                color: palette.textPrimary,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                return RefreshIndicator(
+                  color: palette.primary,
+                  backgroundColor: palette.surface,
+                  onRefresh: () async {
+                    _loadGlobalRecents();
+                    ref.invalidate(deviceFoldersProvider);
+                  },
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(
+                      parent: BouncingScrollPhysics(),
+                    ),
+                    slivers: [
+                      // TOP: Global Recently Played Mixed Videos Carousel (Max 7)
+                      if (_recentItems.isNotEmpty && _searchQuery.isEmpty)
+                        SliverToBoxAdapter(
+                          child: HomeRecentCarousel(
+                            items: _recentItems,
+                            onVideoTap: (recentItem) async {
+                              final rawPosMs = !recentItem.record.isCompleted
+                                  ? recentItem.record.lastPositionMs
+                                  : 0;
+                              final resumeMs = PlayerPlaybackController.calculateRewindResumeMs(
+                                rawPosMs,
+                                rewindSeconds: 10,
+                              );
+
+                              final allRecentVideos = _recentItems.map((e) => e.video).toList();
+                              final targetIdx = allRecentVideos.indexWhere((v) => v.path == recentItem.video.path);
+                              final videoList = targetIdx >= 0 ? allRecentVideos : [recentItem.video, ...allRecentVideos];
+                              final initialIdx = targetIdx >= 0 ? targetIdx : 0;
+
+                              if (!context.mounted) return;
+
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PlayerScreen(
+                                    videos: videoList,
+                                    initialIndex: initialIdx,
+                                    initialPositionMs: resumeMs,
+                                  ),
+                                ),
+                              );
+
+                              if (context.mounted) {
+                                _loadGlobalRecents();
+                              }
+                            },
+                          ),
+                        ),
+
+                      // Header Count indicator with interactive Sort Button
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Folders (${filteredFolders.length})',
+                                style: TextStyle(
+                                  color: palette.textPrimary,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
                               ),
-                            ),
                             InkWell(
                               onTap: _openSortModal,
                               borderRadius: BorderRadius.circular(10),
@@ -331,13 +426,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               padding: const EdgeInsets.only(bottom: 6),
                               child: FolderCard(
                                 folder: folder,
-                                onTap: () {
-                                  Navigator.push(
+                                onTap: () async {
+                                  await Navigator.push(
                                     context,
                                     MaterialPageRoute(
                                       builder: (_) => FolderDetailScreen(folder: folder),
                                     ),
                                   );
+                                  if (mounted) {
+                                    _loadGlobalRecents();
+                                  }
                                 },
                               ),
                             );
@@ -352,9 +450,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       child: SizedBox(height: 90),
                     ),
                   ],
-                );
-              },
-            ),
+                ),
+              );
+            },
+          ),
           ),
 
           // ──────────────────────────────────────────────
