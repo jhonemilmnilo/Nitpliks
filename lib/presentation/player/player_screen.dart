@@ -10,7 +10,9 @@ import '../../app/theme/palette_provider.dart';
 import '../../domain/models/media_models.dart';
 import 'controllers/player_playback_controller.dart';
 import 'providers/playback_speed_provider.dart';
+import 'providers/video_enhancer_provider.dart';
 import 'widgets/playback_speed_drawer.dart';
+import 'widgets/video_enhancer_drawer.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
   final List<VideoModel> videos;
@@ -58,13 +60,15 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     WidgetsBinding.instance.addObserver(this);
 
-    // 3. Initialize clean modular playback controller with synchronous resume point and persisted speed
+    // 3. Initialize clean modular playback controller with synchronous resume point and persisted speed & enhancement
     final initialSpeed = ref.read(playbackSpeedProvider);
+    final initialEnhanceMode = ref.read(videoEnhanceProvider);
     _controller = PlayerPlaybackController(
       videos: widget.videos,
       currentIndex: widget.initialIndex,
       initialPositionMs: widget.initialPositionMs,
       initialSpeed: initialSpeed,
+      initialEnhanceMode: initialEnhanceMode,
     );
 
     // 4. Start playback & resume state machine after the Flutter widget tree has mounted the native Surface/Texture
@@ -805,6 +809,64 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                                         : '${_controller.playbackSpeed}x',
                                                     style: TextStyle(
                                                       color: _controller.playbackSpeed != 1.0
+                                                          ? palette.primary
+                                                          : Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                      letterSpacing: 0.3,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+
+                                        // VISUAL ENHANCER BUTTON (Quality booster)
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(16),
+                                            onTap: () {
+                                              _hideControlsTimer?.cancel();
+                                              VideoEnhancerDrawer.show(
+                                                context,
+                                                currentMode: _controller.enhanceMode,
+                                                onModeSelected: (newMode) {
+                                                  _controller.applyVideoEnhancement(newMode);
+                                                  _startHideControlsTimer();
+                                                },
+                                              ).then((_) {
+                                                _startHideControlsTimer();
+                                              });
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: _controller.enhanceMode != VideoEnhanceMode.off
+                                                      ? palette.primary
+                                                      : Colors.white24,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    LucideIcons.sparkles,
+                                                    size: 14,
+                                                    color: _controller.enhanceMode != VideoEnhanceMode.off
+                                                        ? palette.primary
+                                                        : Colors.white,
+                                                  ),
+                                                  const SizedBox(width: 5),
+                                                  Text(
+                                                    _controller.enhanceMode.label,
+                                                    style: TextStyle(
+                                                      color: _controller.enhanceMode != VideoEnhanceMode.off
                                                           ? palette.primary
                                                           : Colors.white,
                                                       fontSize: 12,

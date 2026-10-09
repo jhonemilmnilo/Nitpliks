@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../../data/services/playback_database_service.dart';
 import '../../../domain/models/media_models.dart';
+import '../providers/video_enhancer_provider.dart';
 
 /// State of the playback lifecycle
 enum PlaybackStateStatus {
@@ -41,6 +42,7 @@ class PlayerPlaybackController extends ChangeNotifier {
   Duration position = Duration.zero;
   Duration duration = Duration.zero;
   double playbackSpeed = 1.0;
+  VideoEnhanceMode enhanceMode = VideoEnhanceMode.off;
 
   // Track the most reliable position even if streams are momentarily desynced
   int _targetResumeMs = 0;
@@ -65,8 +67,10 @@ class PlayerPlaybackController extends ChangeNotifier {
     required this.currentIndex,
     int initialPositionMs = 0,
     double initialSpeed = 1.0,
+    VideoEnhanceMode initialEnhanceMode = VideoEnhanceMode.off,
   }) {
     playbackSpeed = initialSpeed;
+    enhanceMode = initialEnhanceMode;
     if (initialPositionMs >= 2000) {
       _targetResumeMs = initialPositionMs;
       _lastKnownValidPosMs = initialPositionMs;
@@ -257,6 +261,11 @@ class PlayerPlaybackController extends ChangeNotifier {
         await player.setRate(playbackSpeed);
       }
 
+      // Apply persisted video enhancement mode
+      if (enhanceMode != VideoEnhanceMode.off) {
+        await applyVideoEnhancement(enhanceMode);
+      }
+
       // Step 5: Only NOW mark status as ready to lift the black curtain
       status = PlaybackStateStatus.ready;
       isPlaying = player.state.playing;
@@ -266,6 +275,55 @@ class PlayerPlaybackController extends ChangeNotifier {
       status = PlaybackStateStatus.ready;
       await player.play();
       notifyListeners();
+    }
+  }
+
+  /// Apply hardware-accelerated video enhancement profile (libmpv native filters)
+  Future<void> applyVideoEnhancement(VideoEnhanceMode mode) async {
+    enhanceMode = mode;
+    notifyListeners();
+
+    try {
+      final nativePlayer = player.platform;
+      // Access direct native mpv properties safely without breaking playback
+      if (nativePlayer is NativePlayer) {
+        switch (mode) {
+          case VideoEnhanceMode.off:
+            // Reset to pure natural hardware decoding
+            await nativePlayer.setProperty('contrast', '0');
+            await nativePlayer.setProperty('brightness', '0');
+            await nativePlayer.setProperty('saturation', '0');
+            await nativePlayer.setProperty('gamma', '0');
+            await nativePlayer.setProperty('sharpen', '0');
+            break;
+          case VideoEnhanceMode.cinema:
+            // Cinema Mode: Rich contrast, cinematic warmth, deep true blacks
+            await nativePlayer.setProperty('contrast', '6');
+            await nativePlayer.setProperty('brightness', '-2');
+            await nativePlayer.setProperty('saturation', '8');
+            await nativePlayer.setProperty('gamma', '-3');
+            await nativePlayer.setProperty('sharpen', '0');
+            break;
+          case VideoEnhanceMode.vivid:
+            // Vivid / Anime Mode: Punchy vibrance & crisp animated lines
+            await nativePlayer.setProperty('contrast', '10');
+            await nativePlayer.setProperty('brightness', '0');
+            await nativePlayer.setProperty('saturation', '22');
+            await nativePlayer.setProperty('gamma', '0');
+            await nativePlayer.setProperty('sharpen', '1.0');
+            break;
+          case VideoEnhanceMode.superCrisp:
+            // Super Crisp: Maximum edge definition & high clarity
+            await nativePlayer.setProperty('contrast', '8');
+            await nativePlayer.setProperty('brightness', '0');
+            await nativePlayer.setProperty('saturation', '10');
+            await nativePlayer.setProperty('gamma', '0');
+            await nativePlayer.setProperty('sharpen', '2.0');
+            break;
+        }
+      }
+    } catch (e) {
+      debugPrint('⚠️ [ENHANCER NOTICE] Filter application gracefully skipped: $e');
     }
   }
 
