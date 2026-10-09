@@ -364,18 +364,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // ──────────────────────────────────────────────
           Builder(
             builder: (context) {
-              // High-contrast inverted tokens
+              // High-contrast inverted tokens:
+              // Dark Mode -> White / light dock with dark text & icons
+              // Light Mode -> Dark / deep slate dock with white text & icons
               final dockBg = palette.isDark
-                  ? const Color(0xFF1E222D) // Clean raised dark surface in Dark mode
-                  : const Color(0xFF0F172A); // Sleek deep slate/dark in Light mode
+                  ? Colors.white // White in Dark mode
+                  : const Color(0xFF0F172A); // Dark slate in Light mode
               final dockBorder = palette.isDark
-                  ? const Color(0xFF2E3547)
+                  ? const Color(0xFFE2E8F0)
                   : const Color(0xFF1E293B);
               final dockText = palette.isDark
-                  ? const Color(0xFFF8FAFC)
-                  : const Color(0xFFF1F5F9);
+                  ? const Color(0xFF0F172A) // Dark text when dock is white
+                  : Colors.white; // White text when dock is dark
               final dockMuted = palette.isDark
-                  ? const Color(0xFF94A3B8)
+                  ? const Color(0xFF64748B)
                   : const Color(0xFF94A3B8);
 
               return AnimatedPositioned(
