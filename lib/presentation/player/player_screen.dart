@@ -15,6 +15,7 @@ import '../../domain/models/media_models.dart';
 import 'controllers/player_playback_controller.dart';
 import 'providers/playback_speed_provider.dart';
 import 'providers/video_enhancer_provider.dart';
+import 'widgets/online_subtitle_modal.dart';
 import 'widgets/playback_speed_drawer.dart';
 import 'widgets/subtitle_drawer.dart';
 import 'widgets/video_enhancer_drawer.dart';
@@ -263,6 +264,22 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     } finally {
       _startHideControlsTimer();
     }
+  }
+
+  /// Open Online Subtitle Search & Download Modal (OpenSubtitles REST API)
+  void _showOnlineSubtitleDownloader() {
+    _hideControlsTimer?.cancel();
+    OnlineSubtitleModal.show(
+      context,
+      videoTitle: _controller.currentVideo.title,
+      onSubtitleDownloaded: (file) async {
+        final fileName = file.path.split(RegExp(r'[/\\]')).last;
+        await _controller.loadExternalSubtitleFile(file.path, title: fileName);
+        _startHideControlsTimer();
+      },
+    ).then((_) {
+      _startHideControlsTimer();
+    });
   }
 
   // --- Edge Vertical Slide Gestures (Left: Brightness, Right: Volume) ---
@@ -1311,6 +1328,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                                   _startHideControlsTimer();
                                                 },
                                                 onOpenFile: _pickSubtitleFile,
+                                                onOnlineDownload: _showOnlineSubtitleDownloader,
                                               ).then((_) {
                                                 _startHideControlsTimer();
                                               });
