@@ -475,14 +475,16 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                           children: [
                                             Text(
                                               currentVideo.title,
-                                              maxLines: 1,
+                                              maxLines: MediaQuery.of(context).orientation == Orientation.portrait ? 2 : 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: const TextStyle(
                                                 color: Colors.white,
-                                                fontSize: 15,
+                                                fontSize: 14,
                                                 fontWeight: FontWeight.bold,
+                                                height: 1.25,
                                               ),
                                             ),
+                                            const SizedBox(height: 2),
                                             Text(
                                               currentVideo.formattedSize,
                                               style: TextStyle(
