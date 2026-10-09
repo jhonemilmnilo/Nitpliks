@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
+import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -12,6 +13,7 @@ import 'controllers/player_playback_controller.dart';
 import 'providers/playback_speed_provider.dart';
 import 'providers/video_enhancer_provider.dart';
 import 'widgets/playback_speed_drawer.dart';
+import 'widgets/subtitle_drawer.dart';
 import 'widgets/video_enhancer_drawer.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -869,6 +871,67 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                                     _controller.enhanceMode.label,
                                                     style: TextStyle(
                                                       color: _controller.enhanceMode != VideoEnhanceMode.off
+                                                          ? palette.primary
+                                                          : Colors.white,
+                                                      fontSize: 12,
+                                                      fontWeight: FontWeight.bold,
+                                                      letterSpacing: 0.3,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+
+                                        // SUBTITLE BUTTON (Captions & tracks drawer)
+                                        Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(16),
+                                            onTap: () {
+                                              _hideControlsTimer?.cancel();
+                                              SubtitleDrawer.show(
+                                                context,
+                                                tracks: _controller.tracks,
+                                                selectedTrack: _controller.selectedTrack,
+                                                onTrackSelected: (track) {
+                                                  _controller.setSubtitleTrack(track);
+                                                  _startHideControlsTimer();
+                                                },
+                                              ).then((_) {
+                                                _startHideControlsTimer();
+                                              });
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white.withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(
+                                                  color: _controller.selectedTrack.subtitle != SubtitleTrack.no()
+                                                      ? palette.primary
+                                                      : Colors.white24,
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    LucideIcons.subtitles,
+                                                    size: 14,
+                                                    color: _controller.selectedTrack.subtitle != SubtitleTrack.no()
+                                                        ? palette.primary
+                                                        : Colors.white,
+                                                  ),
+                                                  const SizedBox(width: 5),
+                                                  Text(
+                                                    _controller.selectedTrack.subtitle != SubtitleTrack.no()
+                                                        ? 'CC'
+                                                        : 'Off',
+                                                    style: TextStyle(
+                                                      color: _controller.selectedTrack.subtitle != SubtitleTrack.no()
                                                           ? palette.primary
                                                           : Colors.white,
                                                       fontSize: 12,

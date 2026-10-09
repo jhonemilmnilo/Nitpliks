@@ -70,24 +70,11 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
     widget.onModeSelected(mode);
   }
 
-  IconData _getModeIcon(VideoEnhanceMode mode) {
-    switch (mode) {
-      case VideoEnhanceMode.off:
-        return LucideIcons.power;
-      case VideoEnhanceMode.cinema:
-        return LucideIcons.clapperboard;
-      case VideoEnhanceMode.vivid:
-        return LucideIcons.palette;
-      case VideoEnhanceMode.superCrisp:
-        return LucideIcons.sparkles;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final palette = ref.watch(paletteProvider);
     final mediaQuery = MediaQuery.of(context);
-    final drawerWidth = (mediaQuery.size.width * 0.42).clamp(280.0, 360.0);
+    final drawerWidth = (mediaQuery.size.width * 0.40).clamp(280.0, 360.0);
 
     return Material(
       color: Colors.transparent,
@@ -95,7 +82,7 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
         width: drawerWidth,
         height: mediaQuery.size.height,
         decoration: BoxDecoration(
-          color: const Color(0xFF141419).withValues(alpha: 0.94),
+          color: const Color(0xFF111115).withValues(alpha: 0.96),
           border: const Border(
             left: BorderSide(color: Colors.white12, width: 1),
           ),
@@ -114,41 +101,25 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Header
+                  // Clean Minimalist Header
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                    padding: const EdgeInsets.fromLTRB(18, 14, 10, 10),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: palette.primary.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                LucideIcons.sparkles,
-                                color: palette.primary,
-                                size: 18,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Text(
-                              'Visual Enhancer',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ],
+                        const Text(
+                          'Visual Enhancer',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.2,
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(LucideIcons.x, color: Colors.white70, size: 20),
                           onPressed: () => Navigator.of(context).pop(),
+                          splashRadius: 18,
                         ),
                       ],
                     ),
@@ -156,83 +127,50 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
 
                   const Divider(color: Colors.white10, height: 1),
 
-                  // Presets List
+                  // Compact Presets List
                   Expanded(
                     child: ListView(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       children: VideoEnhanceMode.values.map((mode) {
                         final isSelected = _activeMode == mode;
-                        final icon = _getModeIcon(mode);
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? palette.primary.withValues(alpha: 0.15)
-                                : Colors.white.withValues(alpha: 0.05),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: isSelected ? palette.primary : Colors.white10,
-                              width: isSelected ? 1.5 : 1,
-                            ),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            borderRadius: BorderRadius.circular(12),
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
-                              onTap: () => _applyMode(mode),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.all(8),
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? palette.primary.withValues(alpha: 0.25)
-                                            : Colors.white.withValues(alpha: 0.08),
-                                        shape: BoxShape.circle,
+                        return InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: () => _applyMode(mode),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        mode.label,
+                                        style: TextStyle(
+                                          color: isSelected ? palette.primary : Colors.white.withValues(alpha: 0.9),
+                                          fontSize: 14,
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        ),
                                       ),
-                                      child: Icon(
-                                        icon,
-                                        size: 16,
-                                        color: isSelected ? palette.primary : Colors.white70,
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        mode.description,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.45),
+                                          fontSize: 11,
+                                        ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            mode.label,
-                                            style: TextStyle(
-                                              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.85),
-                                              fontSize: 14,
-                                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            mode.description,
-                                            style: TextStyle(
-                                              color: Colors.white.withValues(alpha: 0.5),
-                                              fontSize: 11,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    if (isSelected)
-                                      Icon(
-                                        LucideIcons.check,
-                                        color: palette.primary,
-                                        size: 18,
-                                      ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
-                              ),
+                                if (isSelected)
+                                  Icon(
+                                    LucideIcons.check,
+                                    color: palette.primary,
+                                    size: 16,
+                                  ),
+                              ],
                             ),
                           ),
                         );

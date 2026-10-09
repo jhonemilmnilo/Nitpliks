@@ -43,6 +43,8 @@ class PlayerPlaybackController extends ChangeNotifier {
   Duration duration = Duration.zero;
   double playbackSpeed = 1.0;
   VideoEnhanceMode enhanceMode = VideoEnhanceMode.off;
+  Tracks tracks = const Tracks();
+  Track selectedTrack = const Track();
 
   // Track the most reliable position even if streams are momentarily desynced
   int _targetResumeMs = 0;
@@ -57,6 +59,8 @@ class PlayerPlaybackController extends ChangeNotifier {
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _completedSub;
   StreamSubscription<double>? _rateSub;
+  StreamSubscription<Tracks>? _tracksSub;
+  StreamSubscription<Track>? _trackSub;
 
   VideoModel get currentVideo => videos[currentIndex];
   bool get hasPrevious => currentIndex > 0;
@@ -167,6 +171,20 @@ class PlayerPlaybackController extends ChangeNotifier {
           debugPrint('⚠️ [PLAYBACK COMPLETED IGNORED] Spurious completed signal during load/seek.');
         }
       }
+    });
+
+    // Tracks stream (subtitles, audio, video tracks)
+    _tracksSub = player.stream.tracks.listen((t) {
+      if (_isDisposed) return;
+      tracks = t;
+      notifyListeners();
+    });
+
+    // Active track stream
+    _trackSub = player.stream.track.listen((t) {
+      if (_isDisposed) return;
+      selectedTrack = t;
+      notifyListeners();
     });
   }
 
@@ -443,6 +461,12 @@ class PlayerPlaybackController extends ChangeNotifier {
     }
   }
 
+  /// Select subtitle track or turn off (SubtitleTrack.no())
+  Future<void> setSubtitleTrack(SubtitleTrack subtitleTrack) async {
+    await player.setSubtitleTrack(subtitleTrack);
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
@@ -451,6 +475,8 @@ class PlayerPlaybackController extends ChangeNotifier {
     _durationSub?.cancel();
     _completedSub?.cancel();
     _rateSub?.cancel();
+    _tracksSub?.cancel();
+    _trackSub?.cancel();
     player.dispose();
     super.dispose();
   }
