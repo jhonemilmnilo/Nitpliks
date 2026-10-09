@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:screen_brightness/screen_brightness.dart';
+import 'package:volume_controller/volume_controller.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../app/theme/palette_provider.dart';
@@ -66,6 +68,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   double? _initialPinchDistance;
   double _pinchStartSubtitleScale = 1.0;
 
+  // Vertical Slide Gesture State (Left: Brightness, Right: Volume)
+  bool _isAdjustingBrightness = false;
+  bool _isAdjustingVolume = false;
+  double _currentBrightness = 0.5;
+  double _currentVolume = 0.5;
+  Timer? _hideBrightnessHudTimer;
+  Timer? _hideVolumeHudTimer;
+
   @override
   void initState() {
     super.initState();
@@ -94,8 +104,28 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
       }
     });
 
-    // 5. Auto hide controls timer
+    // 5. Initialize device brightness and volume
+    _initHardwareControls();
+
+    // 6. Auto hide controls timer
     _startHideControlsTimer();
+  }
+
+  Future<void> _initHardwareControls() async {
+    try {
+      _currentBrightness = await ScreenBrightness().application;
+    } catch (_) {
+      try {
+        _currentBrightness = await ScreenBrightness().system;
+      } catch (_) {
+        _currentBrightness = 0.5;
+      }
+    }
+    try {
+      _currentVolume = await VolumeController.instance.getVolume();
+    } catch (_) {
+      _currentVolume = 0.5;
+    }
   }
 
   @override
@@ -235,9 +265,94 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     }
   }
 
+  // --- Edge Vertical Slide Gestures (Left: Brightness, Right: Volume) ---
+  Future<void> _onVerticalDragStart(DragStartDetails details) async {
+    if (_isScreenLocked || _isInteractingWithSubtitle || _activePointers.length > 1) return;
+    _hideControlsTimer?.cancel();
+
+    final screenWidth = MediaQuery.of(context).size.width;
+    final touchX = details.globalPosition.dx;
+
+    // Left 35% of the screen -> Brightness
+    if (touchX < screenWidth * 0.35) {
+      _hideBrightnessHudTimer?.cancel();
+      try {
+        _currentBrightness = await ScreenBrightness().application;
+      } catch (_) {
+        try {
+          _currentBrightness = await ScreenBrightness().system;
+        } catch (_) {}
+      }
+      setState(() {
+        _isAdjustingBrightness = true;
+        _isAdjustingVolume = false;
+      });
+    }
+    // Right 35% of the screen -> Volume
+    else if (touchX > screenWidth * 0.65) {
+      _hideVolumeHudTimer?.cancel();
+      try {
+        _currentVolume = await VolumeController.instance.getVolume();
+      } catch (_) {}
+      setState(() {
+        _isAdjustingVolume = true;
+        _isAdjustingBrightness = false;
+      });
+    }
+  }
+
+  void _onVerticalDragUpdate(DragUpdateDetails details) {
+    if (_isScreenLocked || _isInteractingWithSubtitle || _activePointers.length > 1) return;
+
+    final screenHeight = MediaQuery.of(context).size.height;
+    // Moving up decreases dy (negative delta), so inverted
+    final deltaFraction = -details.primaryDelta! / (screenHeight * 0.6);
+
+    if (_isAdjustingBrightness) {
+      final newBrightness = (_currentBrightness + deltaFraction).clamp(0.0, 1.0);
+      _currentBrightness = newBrightness;
+      ScreenBrightness().setApplicationScreenBrightness(newBrightness);
+      setState(() {});
+    } else if (_isAdjustingVolume) {
+      final newVolume = (_currentVolume + deltaFraction).clamp(0.0, 1.0);
+      _currentVolume = newVolume;
+      VolumeController.instance.showSystemUI = false;
+      VolumeController.instance.setVolume(newVolume);
+      setState(() {});
+    }
+  }
+
+  void _onVerticalDragEnd(DragEndDetails details) {
+    if (_isAdjustingBrightness) {
+      _hideBrightnessHudTimer?.cancel();
+      _hideBrightnessHudTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (mounted) {
+          setState(() => _isAdjustingBrightness = false);
+        }
+      });
+    }
+
+    if (_isAdjustingVolume) {
+      _hideVolumeHudTimer?.cancel();
+      _hideVolumeHudTimer = Timer(const Duration(milliseconds: 1200), () {
+        if (mounted) {
+          setState(() => _isAdjustingVolume = false);
+        }
+      });
+    }
+
+    _startHideControlsTimer();
+  }
+
   // --- Horizontal Swipe to Seek Gestures ---
   void _onHorizontalDragStart(DragStartDetails details) {
-    if (_isScreenLocked || _isInteractingWithSubtitle || _activePointers.length > 1) return;
+    if (_isScreenLocked ||
+        _isInteractingWithSubtitle ||
+        _isAdjustingBrightness ||
+        _isAdjustingVolume ||
+        _activePointers.length > 1) {
+      return;
+    }
     _hideControlsTimer?.cancel();
     final currentMs = _controller.getCurrentAccuratePositionMs();
     setState(() {
@@ -249,7 +364,14 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
   }
 
   void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    if (_isScreenLocked || _isInteractingWithSubtitle || _activePointers.length > 1 || !_isSwipingToSeek) return;
+    if (_isScreenLocked ||
+        _isInteractingWithSubtitle ||
+        _isAdjustingBrightness ||
+        _isAdjustingVolume ||
+        _activePointers.length > 1 ||
+        !_isSwipingToSeek) {
+      return;
+    }
 
     final screenWidth = MediaQuery.of(context).size.width;
     _accumulatedSwipeDx += details.primaryDelta ?? 0.0;
@@ -304,6 +426,11 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
     WidgetsBinding.instance.removeObserver(this);
     _hideControlsTimer?.cancel();
     _unlockButtonTimer?.cancel();
+    _hideBrightnessHudTimer?.cancel();
+    _hideVolumeHudTimer?.cancel();
+    try {
+      ScreenBrightness().resetApplicationScreenBrightness();
+    } catch (_) {}
 
     // Restore System UI & release wakelock
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -405,6 +532,9 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                 onHorizontalDragStart: _onHorizontalDragStart,
                 onHorizontalDragUpdate: _onHorizontalDragUpdate,
                 onHorizontalDragEnd: _onHorizontalDragEnd,
+                onVerticalDragStart: _onVerticalDragStart,
+                onVerticalDragUpdate: _onVerticalDragUpdate,
+                onVerticalDragEnd: _onVerticalDragEnd,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
@@ -501,6 +631,84 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                             ),
                           ),
                         ],
+                      ),
+                    ),
+
+                  // 3.1 Brightness Minimalist HUD (Vertically Centered on Left Edge - Pure Icon & Text)
+                  if (_isAdjustingBrightness)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 36),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _currentBrightness > 0.5
+                                  ? LucideIcons.sun
+                                  : LucideIcons.sunMedium,
+                              color: Colors.white,
+                              size: 40,
+                              shadows: const [
+                                Shadow(color: Colors.black, blurRadius: 10, offset: Offset(1, 1)),
+                                Shadow(color: Colors.black87, blurRadius: 14),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${(_currentBrightness * 100).round()}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                                shadows: [
+                                  Shadow(color: Colors.black, blurRadius: 10, offset: Offset(1, 1)),
+                                  Shadow(color: Colors.black87, blurRadius: 14),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                  // 3.2 Volume Minimalist HUD (Vertically Centered on Right Edge - Pure Icon & Text)
+                  if (_isAdjustingVolume)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 36),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _currentVolume == 0
+                                  ? LucideIcons.volumeX
+                                  : (_currentVolume < 0.5 ? LucideIcons.volume1 : LucideIcons.volume2),
+                              color: Colors.white,
+                              size: 40,
+                              shadows: const [
+                                Shadow(color: Colors.black, blurRadius: 10, offset: Offset(1, 1)),
+                                Shadow(color: Colors.black87, blurRadius: 14),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              '${(_currentVolume * 100).round()}%',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.5,
+                                shadows: [
+                                  Shadow(color: Colors.black, blurRadius: 10, offset: Offset(1, 1)),
+                                  Shadow(color: Colors.black87, blurRadius: 14),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
 

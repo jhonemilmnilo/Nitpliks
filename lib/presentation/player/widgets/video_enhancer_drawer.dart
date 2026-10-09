@@ -82,19 +82,21 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
         width: drawerWidth,
         height: mediaQuery.size.height,
         decoration: BoxDecoration(
-          color: const Color(0xFF111115).withValues(alpha: 0.96),
-          border: const Border(
-            left: BorderSide(color: Colors.white12, width: 1),
+          color: palette.surface.withValues(alpha: palette.isDark ? 0.96 : 0.98),
+          borderRadius: const BorderRadius.horizontal(left: Radius.circular(24)),
+          border: Border(
+            left: BorderSide(color: palette.border, width: 1),
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.6),
+              color: Colors.black.withValues(alpha: palette.isDark ? 0.6 : 0.2),
               blurRadius: 30,
               offset: const Offset(-5, 0),
             ),
           ],
         ),
         child: ClipRRect(
+          borderRadius: const BorderRadius.horizontal(left: Radius.circular(24)),
           child: BackdropFilter(
             filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
             child: SafeArea(
@@ -107,17 +109,17 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
+                        Text(
                           'Visual Enhancer',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: palette.textPrimary,
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 0.2,
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(LucideIcons.x, color: Colors.white70, size: 20),
+                          icon: Icon(LucideIcons.x, color: palette.textMuted, size: 20),
                           onPressed: () => Navigator.of(context).pop(),
                           splashRadius: 18,
                         ),
@@ -125,7 +127,7 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
                     ),
                   ),
 
-                  const Divider(color: Colors.white10, height: 1),
+                  Divider(color: palette.border.withValues(alpha: 0.5), height: 1),
 
                   // Compact Presets List
                   Expanded(
@@ -148,7 +150,7 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
                                       Text(
                                         mode.label,
                                         style: TextStyle(
-                                          color: isSelected ? palette.primary : Colors.white.withValues(alpha: 0.9),
+                                          color: isSelected ? palette.primary : palette.textPrimary,
                                           fontSize: 14,
                                           fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                         ),
@@ -157,7 +159,7 @@ class _VideoEnhancerDrawerState extends ConsumerState<VideoEnhancerDrawer> {
                                       Text(
                                         mode.description,
                                         style: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.45),
+                                          color: palette.textMuted,
                                           fontSize: 11,
                                         ),
                                       ),
