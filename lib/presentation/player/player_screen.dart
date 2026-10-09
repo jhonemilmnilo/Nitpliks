@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -174,6 +175,50 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
         DeviceOrientation.portraitUp,
         DeviceOrientation.portraitDown,
       ]);
+    }
+  }
+
+  /// Open file picker strictly filtered to subtitle formats (.srt, .ass, .vtt, .ssa, .sub)
+  Future<void> _pickSubtitleFile() async {
+    _hideControlsTimer?.cancel();
+    debugPrint('🎬 [OPEN FILE TRIGGERED] Opening native file picker for subtitles...');
+    try {
+      final files = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['srt', 'ass', 'vtt', 'ssa', 'sub'],
+      );
+
+      debugPrint('🎬 [OPEN FILE RESULT] Picked files: ${files.length}');
+
+      if (files.isNotEmpty) {
+        final filePath = files.first.path;
+        final fileName = files.first.name;
+        if (filePath != null) {
+          await _controller.loadExternalSubtitleFile(filePath, title: fileName);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Loaded subtitle: $fileName'),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
+      }
+    } catch (e, stack) {
+      debugPrint('🚨 [PICK SUBTITLE ERROR] $e\n$stack');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening file: $e'),
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      _startHideControlsTimer();
     }
   }
 
@@ -900,6 +945,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> with WidgetsBinding
                                                   _controller.setSubtitleTrack(track);
                                                   _startHideControlsTimer();
                                                 },
+                                                onOpenFile: _pickSubtitleFile,
                                               ).then((_) {
                                                 _startHideControlsTimer();
                                               });

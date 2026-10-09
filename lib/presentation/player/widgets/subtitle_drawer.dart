@@ -248,7 +248,9 @@ class _SubtitleDrawerState extends ConsumerState<SubtitleDrawer> {
                           palette: palette,
                           onTap: () {
                             Navigator.of(context).pop();
-                            widget.onOpenFile?.call();
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              widget.onOpenFile?.call();
+                            });
                           },
                         ),
 
@@ -258,7 +260,9 @@ class _SubtitleDrawerState extends ConsumerState<SubtitleDrawer> {
                           palette: palette,
                           onTap: () {
                             Navigator.of(context).pop();
-                            widget.onOnlineDownload?.call();
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              widget.onOnlineDownload?.call();
+                            });
                           },
                         ),
 

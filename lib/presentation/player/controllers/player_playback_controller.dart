@@ -467,6 +467,21 @@ class PlayerPlaybackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Load and apply external subtitle file from local device storage (.srt, .ass, .vtt, .ssa)
+  Future<void> loadExternalSubtitleFile(String filePath, {String? title}) async {
+    try {
+      final track = SubtitleTrack.uri(
+        filePath,
+        title: title ?? filePath.split(RegExp(r'[/\\]')).last,
+      );
+      await player.setSubtitleTrack(track);
+      notifyListeners();
+      debugPrint('🎬 [EXTERNAL SUBTITLE LOADED] $filePath');
+    } catch (e) {
+      debugPrint('🚨 [EXTERNAL SUBTITLE ERROR] $e');
+    }
+  }
+
   @override
   void dispose() {
     _isDisposed = true;
