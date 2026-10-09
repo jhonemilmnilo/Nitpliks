@@ -9,6 +9,7 @@ import '../home/widgets/video_list_item.dart';
 import '../player/controllers/player_playback_controller.dart';
 import '../player/player_screen.dart';
 import 'providers/video_sort_provider.dart';
+import 'widgets/folder_recent_carousel.dart';
 import 'widgets/video_sort_bottom_sheet.dart';
 
 class FolderDetailScreen extends ConsumerStatefulWidget {
@@ -28,11 +29,61 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
   final TextEditingController _searchController = TextEditingController();
   bool _isModalOpen = false;
   int _listVersionCounter = 0;
+  List<FolderRecentItem> _recentItems = [];
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  List<String> _lastLoadedVideoPaths = [];
+
+  Future<void> _loadRecentsForFolder(List<VideoModel> videos) async {
+    if (videos.isEmpty) {
+      if (_recentItems.isNotEmpty && mounted) {
+        setState(() => _recentItems = []);
+      }
+      return;
+    }
+
+    final paths = videos.map((v) => v.path).toList();
+    // Prevent redundant database queries and continuous setState rebuild cycles
+    if (_lastLoadedVideoPaths.length == paths.length &&
+        _lastLoadedVideoPaths.isNotEmpty &&
+        _lastLoadedVideoPaths.first == paths.first) {
+      return;
+    }
+
+    _lastLoadedVideoPaths = paths;
+
+    try {
+      final records = await PlaybackDatabaseService.instance.getFolderRecentlyPlayed(
+        folderVideoPaths: paths,
+        limit: 5,
+      );
+
+      // Map records back to VideoModel instances
+      final videoMap = {for (final v in videos) v.path: v};
+      final matched = <FolderRecentItem>[];
+      for (final r in records) {
+        final v = videoMap[r.videoPath];
+        if (v != null) {
+          matched.add(FolderRecentItem(video: v, record: r));
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _recentItems = matched;
+        });
+      }
+    } catch (_) {}
+  }
+
+  void _forceReloadRecents(List<VideoModel> videos) {
+    _lastLoadedVideoPaths = [];
+    _loadRecentsForFolder(videos);
   }
 
   Future<void> _openSortModal() async {
@@ -188,6 +239,9 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
 
               final filteredVideos = _applyFilterAndSort(allVideos, sortOption);
 
+              // Auto-load recently played items for this folder
+              _loadRecentsForFolder(allVideos);
+
               if (filteredVideos.isEmpty && _searchQuery.isNotEmpty) {
                 return Center(
                   child: Column(
@@ -221,6 +275,7 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                 color: palette.primary,
                 backgroundColor: palette.surface,
                 onRefresh: () async {
+                  _forceReloadRecents(allVideos);
                   return ref.read(folderVideosProvider(widget.folder.id).notifier).refresh();
                 },
                 child: CustomScrollView(
@@ -228,6 +283,47 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                     parent: BouncingScrollPhysics(),
                   ),
                   slivers: [
+                    // TOP: Scoped Folder Recently Played Carousel (Max 5)
+                    if (_recentItems.isNotEmpty && _searchQuery.isEmpty)
+                      SliverToBoxAdapter(
+                        child: FolderRecentCarousel(
+                          items: _recentItems,
+                          onVideoTap: (recentItem) async {
+                            final rawPosMs = !recentItem.record.isCompleted
+                                ? recentItem.record.lastPositionMs
+                                : 0;
+                            final resumeMs = PlayerPlaybackController.calculateRewindResumeMs(
+                              rawPosMs,
+                              rewindSeconds: 10,
+                            );
+
+                            final targetIdx = filteredVideos.indexWhere((v) => v.path == recentItem.video.path);
+                            final videoList = targetIdx >= 0 ? filteredVideos : [recentItem.video, ...filteredVideos];
+                            final initialIdx = targetIdx >= 0 ? targetIdx : 0;
+
+                            if (!context.mounted) return;
+
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PlayerScreen(
+                                  videos: videoList,
+                                  initialIndex: initialIdx,
+                                  initialPositionMs: resumeMs,
+                                ),
+                              ),
+                            );
+
+                            if (context.mounted) {
+                              setState(() {
+                                _listVersionCounter++;
+                              });
+                              _forceReloadRecents(allVideos);
+                            }
+                          },
+                        ),
+                      ),
+
                     // Header with Count indicator & Active Sort Chip
                     SliverToBoxAdapter(
                       child: Padding(
@@ -314,6 +410,7 @@ class _FolderDetailScreenState extends ConsumerState<FolderDetailScreen> {
                                   setState(() {
                                     _listVersionCounter++;
                                   });
+                                  _forceReloadRecents(allVideos);
                                 }
                               },
                             );

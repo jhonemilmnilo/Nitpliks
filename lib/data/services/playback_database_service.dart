@@ -224,4 +224,29 @@ class PlaybackDatabaseService {
       return [];
     }
   }
+
+  /// Retrieve top recently played videos scoped specifically to a list of folder video paths
+  /// Strictly limited (default 5 items) and sorted by latest played timestamp
+  Future<List<PlaybackHistoryRecord>> getFolderRecentlyPlayed({
+    required List<String> folderVideoPaths,
+    int limit = 5,
+  }) async {
+    if (folderVideoPaths.isEmpty) return [];
+    try {
+      final db = await database;
+      // SQLite IN clause placeholders (?, ?, ...)
+      final placeholders = List.filled(folderVideoPaths.length, '?').join(',');
+      final results = await db.rawQuery('''
+        SELECT * FROM $tableName
+        WHERE video_path IN ($placeholders)
+        ORDER BY last_played_at DESC
+        LIMIT $limit
+      ''', folderVideoPaths);
+
+      return results.map((m) => PlaybackHistoryRecord.fromMap(m)).toList();
+    } catch (e) {
+      debugPrint('🚨 [DB ERROR] getFolderRecentlyPlayed failed: $e');
+      return [];
+    }
+  }
 }
